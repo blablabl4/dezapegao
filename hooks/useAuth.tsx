@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 import type { User, Session } from '@supabase/supabase-js'
 
 interface Profile {
@@ -58,9 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single()
 
         if (error) {
-            console.error('Error fetching profile:', error)
+            logger.error('auth', 'fetchProfile', 'Error fetching profile', error, { userId })
             return null
         }
+        logger.debug('auth', 'fetchProfile', 'Profile fetched successfully', { userId })
         return data as Profile
     }
 
@@ -91,8 +93,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     })
                 }
             } catch (error) {
-                console.error('Auth init error:', error)
+                logger.error('auth', 'initAuth', 'Auth initialization failed', error)
             } finally {
+                logger.info('auth', 'initAuth', 'Auth initialization completed')
                 if (mounted) setLoading(false)
             }
         }
@@ -152,8 +155,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     })
 
                 if (profileError) {
-                    console.error('Profile creation error:', profileError)
+                    logger.error('auth', 'signup', 'Profile creation failed after signup', profileError, { userId: data.user.id })
                     // Don't throw - user is created, profile can be fixed later
+                } else {
+                    logger.info('auth', 'signup', 'Profile created successfully', { userId: data.user.id })
                 }
             }
 
@@ -180,10 +185,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Sign out
     const signOut = async () => {
-        await supabase.auth.signOut()
+        logger.info('auth', 'signOut', 'Starting signOut')
+        try {
+            const { error } = await supabase.auth.signOut()
+            if (error) {
+                logger.error('auth', 'signOut', 'Supabase signOut error', error)
+            } else {
+                logger.info('auth', 'signOut', 'Supabase signOut successful')
+            }
+        } catch (error) {
+            logger.error('auth', 'signOut', 'Critical signOut error', error)
+        }
         setUser(null)
         setProfile(null)
         setSession(null)
+        logger.info('auth', 'signOut', 'State cleared')
     }
 
     // Update profile

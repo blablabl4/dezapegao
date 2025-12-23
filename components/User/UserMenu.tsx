@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
+import { logger } from '@/lib/logger'
 import { useState } from 'react'
 
 const glassStyle = {
@@ -25,18 +26,23 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
 
     const handleLogout = async () => {
         setLoggingOut(true)
+        logger.startTimer('logout', 'auth', 'logout')
+        logger.info('auth', 'logout', 'Starting logout process')
 
-        // Force redirect after 1 second no matter what
+        // Force redirect after 2 seconds no matter what
         const forceRedirect = setTimeout(() => {
+            logger.warn('auth', 'logout', 'Force redirect triggered - signOut took too long')
             window.location.href = '/'
-        }, 1000)
+        }, 2000)
 
         try {
             await signOut()
+            logger.auth.logout(true)
         } catch (error) {
-            console.error('Logout error:', error)
+            logger.auth.logout(false, error)
         } finally {
             clearTimeout(forceRedirect)
+            logger.endTimer('logout', 'Logout completed')
             onClose()
             // Small delay then redirect
             setTimeout(() => {
