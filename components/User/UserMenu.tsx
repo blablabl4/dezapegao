@@ -144,6 +144,10 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
                         <span className="text-xl flex items-center justify-center">{loggingOut ? '⏳' : '🚪'}</span>
                         <span className="font-medium flex items-center">{loggingOut ? 'Saindo...' : 'Sair'}</span>
                     </button>
+
+                    <div className="mt-4 text-center">
+                        <span className="text-xs text-white/30">v1.1 (Fix Logout)</span>
+                    </div>
                 </div>
             </div>
         </>
