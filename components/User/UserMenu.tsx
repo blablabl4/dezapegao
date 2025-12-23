@@ -25,14 +25,23 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
 
     const handleLogout = async () => {
         setLoggingOut(true)
+
+        // Force redirect after 1 second no matter what
+        const forceRedirect = setTimeout(() => {
+            window.location.href = '/'
+        }, 1000)
+
         try {
             await signOut()
-            onClose()
-            // Full page reload to clear all cached state
-            window.location.href = '/'
         } catch (error) {
             console.error('Logout error:', error)
-            setLoggingOut(false)
+        } finally {
+            clearTimeout(forceRedirect)
+            onClose()
+            // Small delay then redirect
+            setTimeout(() => {
+                window.location.href = '/'
+            }, 100)
         }
     }
 
