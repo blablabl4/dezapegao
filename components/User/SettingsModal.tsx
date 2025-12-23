@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { uploadAvatar } from '@/lib/storage'
+import { Toast } from '@/components/UI/Toast'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -28,7 +29,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         username: '',
-        email: '',
         phone: '',
         gender: '',
         birthdate: '',
@@ -37,23 +37,29 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     })
     const [saving, setSaving] = useState(false)
     const [uploadingAvatar, setUploadingAvatar] = useState(false)
-    const [message, setMessage] = useState('')
-    const [error, setError] = useState('')
+
+    // Configuração do Toast
+    const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' | 'info' }>({
+        show: false,
+        message: '',
+        type: 'info'
+    })
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+        setToast({ show: true, message, type })
+    }
 
     useEffect(() => {
         if (isOpen && profile) {
             setAvatarPreview(profile.avatar_url || null)
             setFormData({
                 username: profile.username || '',
-                email: profile.email || user?.email || '',
                 phone: profile.phone || '',
                 gender: profile.gender || '',
                 birthdate: profile.birthdate || '',
                 currentPassword: '',
                 newPassword: '',
             })
-            setMessage('')
-            setError('')
         }
     }, [isOpen, profile, user])
 
@@ -62,37 +68,35 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         if (!file || !user) return
 
         if (file.size > 2 * 1024 * 1024) {
-            setError('Foto deve ter no máximo 2MB')
+            showToast('Foto deve ter no máximo 2MB', 'error')
             return
         }
 
         setUploadingAvatar(true)
-        setError('')
 
         try {
-            // Show preview immediately
+            // Preview
             const reader = new FileReader()
             reader.onloadend = () => {
                 setAvatarPreview(reader.result as string)
             }
             reader.readAsDataURL(file)
 
-            // Upload to Supabase Storage
+            // Upload
             const { url, error: uploadError } = await uploadAvatar(file, user.id)
 
             if (uploadError) {
-                setError('Erro ao enviar foto: ' + uploadError.message)
+                showToast('Erro ao enviar: ' + uploadError.message, 'error')
                 return
             }
 
             if (url) {
-                // Update profile with new avatar URL
                 await updateProfile({ avatar_url: url })
                 await refreshProfile()
-                setMessage('Foto atualizada!')
+                showToast('Foto atualizada com sucesso!', 'success')
             }
         } catch (err) {
-            setError('Erro ao enviar foto')
+            showToast('Erro desconhecido ao enviar foto', 'error')
         } finally {
             setUploadingAvatar(false)
         }
@@ -102,11 +106,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         if (!user) return
 
         setSaving(true)
-        setError('')
-        setMessage('')
 
         try {
-            // Create a timeout promise
             const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Tempo limite excedido. Tente novamente.')), 10000)
             )
@@ -118,19 +119,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 birthdate: formData.birthdate || null,
             })
 
-            // Race between update and timeout
             const { error: updateError } = await Promise.race([updatePromise, timeoutPromise]) as any
 
             if (updateError) {
-                setError('Erro ao salvar: ' + updateError.message)
+                showToast('Erro ao salvar: ' + updateError.message, 'error')
             } else {
-                // Refresh profile in background to avoid UI hang
                 refreshProfile().catch(console.error)
-                setMessage('Dados salvos!')
+                showToast(`Perfil de ${formData.username} atualizado!`, 'success')
             }
         } catch (err: any) {
             console.error(err)
-            setError(err.message || 'Erro ao salvar alterações')
+            showToast(err.message || 'Erro ao salvar alterações', 'error')
         } finally {
             setSaving(false)
         }
@@ -140,6 +139,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     return (
         <>
+            {toast.show && (
+                <Toast
+                    message={toast.message}
+                    type={toast.type}
+                    onClose={() => setToast({ ...toast, show: false })}
+                />
+            )}
+
             <div
                 className="fixed top-14 left-0 right-0 bottom-0 bg-black/50 z-40"
                 style={{ backdropFilter: 'blur(12px)' }}
@@ -159,18 +166,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </button>
 
                     <h1 className="text-2xl font-bold text-white mb-6 text-center">Configurações</h1>
-
-                    {message && (
-                        <div className="mb-4 p-3 bg-green-500/20 border border-green-500/30 text-green-200 rounded-xl text-sm text-center">
-                            {message}
-                        </div>
-                    )}
-
-                    {error && (
-                        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 text-red-200 rounded-xl text-sm text-center">
-                            {error}
-                        </div>
-                    )}
 
                     {/* Avatar */}
                     <div className="flex flex-col items-center mb-6">
@@ -202,8 +197,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 placeholder="Seu nome"
                             />
                         </div>
-
-
 
                         {/* Phone */}
                         <div>
