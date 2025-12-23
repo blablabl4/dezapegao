@@ -220,6 +220,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setSession(null)
         logger.info('auth', 'signOut', 'State and storage cleared')
+
+        // Force reload to ensure clean state (avoids caching issues)
+        if (typeof window !== 'undefined') {
+            window.location.href = '/'
+        }
     }
 
     // Update profile

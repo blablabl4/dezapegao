@@ -203,17 +203,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             />
                         </div>
 
-                        {/* Email (read-only) */}
-                        <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">Email</label>
-                            <input
-                                type="email"
-                                value={formData.email}
-                                readOnly
-                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/60 text-sm cursor-not-allowed"
-                            />
-                            <p className="text-white/40 text-xs mt-1">Email não pode ser alterado</p>
-                        </div>
+
 
                         {/* Phone */}
                         <div>
