@@ -71,10 +71,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let mounted = true
 
         const initAuth = async () => {
+            logger.info('auth', 'initAuth', 'Starting auth initialization', {
+                supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...'
+            })
+
             try {
-                // Safety timeout - don't hang forever
-                const timeout = new Promise((_, reject) =>
-                    setTimeout(() => reject(new Error('Auth timeout')), 5000)
+                // Increased timeout to 15 seconds
+                const timeout = new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error('Auth timeout - Supabase is slow or unreachable')), 15000)
                 )
 
                 const sessionPromise = supabase.auth.getSession()
@@ -85,12 +89,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 ]) as { data: { session: any } }
 
                 if (mounted && currentSession?.user) {
+                    logger.info('auth', 'initAuth', 'Session found', { userId: currentSession.user.id })
                     setSession(currentSession)
                     setUser(currentSession.user)
                     // Don't wait for profile - load in background
                     fetchProfile(currentSession.user.id).then(profileData => {
                         if (mounted) setProfile(profileData)
                     })
+                } else {
+                    logger.info('auth', 'initAuth', 'No active session')
                 }
             } catch (error) {
                 logger.error('auth', 'initAuth', 'Auth initialization failed', error)
