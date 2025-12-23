@@ -111,17 +111,30 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
         const files = Array.from(e.target.files || [])
 
         if (images.length + files.length > 3) {
-            setError('Máximo 3 fotos')
+            setError('⚠️ Máximo 3 fotos permitidas')
             return
         }
 
-        const validFiles = files.filter(file => {
-            if (file.size > 5 * 1024 * 1024) {
-                setError('Cada foto deve ter no máximo 5MB')
-                return false
+        const validFiles: File[] = []
+
+        for (const file of files) {
+            // Check file size (2MB max for better mobile performance)
+            if (file.size > 2 * 1024 * 1024) {
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+                setError(`⚠️ Foto "${file.name}" tem ${sizeMB}MB. Máximo: 2MB`)
+                continue
             }
-            return true
-        })
+
+            // Check if it's actually an image
+            if (!file.type.startsWith('image/')) {
+                setError(`⚠️ "${file.name}" não é uma imagem válida`)
+                continue
+            }
+
+            validFiles.push(file)
+        }
+
+        if (validFiles.length === 0) return
 
         const base64Promises = validFiles.map(file => {
             return new Promise<string>((resolve) => {
@@ -135,7 +148,9 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
 
         setImages([...images, ...validFiles])
         setImagePreviews([...imagePreviews, ...base64Images])
-        setError('')
+        if (validFiles.length === files.length) {
+            setError('')
+        }
     }
 
     const removeImage = (index: number) => {
@@ -298,7 +313,7 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                                             </svg>
                                             <p className="text-sm text-white/60">Adicionar foto</p>
-                                            <p className="text-xs text-white/40 mt-1">Máx 5MB cada</p>
+                                            <p className="text-xs text-white/40 mt-1">Máx 2MB cada</p>
                                         </label>
                                     </>
                                 )}

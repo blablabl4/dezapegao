@@ -7,9 +7,20 @@
   }
 }
 
-/* Fonts */
+/* Prevent zoom on mobile */
 html {
   font-family: system-ui, -apple-system, sans-serif;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Prevent zoom on input focus - mobile fix */
+input,
+textarea,
+select,
+button {
+  font-size: 16px !important;
+  touch-action: manipulation;
 }
 
 h1,
@@ -38,7 +49,7 @@ h6,
   scrollbar-width: none;
 }
 
-/* Remove autofill white background */
+/* Remove autofill background */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
@@ -52,17 +63,19 @@ textarea:-webkit-autofill:active {
   transition: background-color 5000s ease-in-out 0s;
 }
 
+/* Disable all zooming/scaling */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Mobile optimizations */
 @media (max-width: 768px) {
   html {
-    font-size: 14px;
-  }
-
-  h1 {
-    font-size: 1.5rem;
-  }
-
-  h2 {
-    font-size: 1.25rem;
+    font-size: 16px;
   }
 }

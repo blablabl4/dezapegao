@@ -134,9 +134,9 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="flex-shrink-0 h-14 relative z-30">
+    <div className="flex flex-col h-screen overflow-hidden">
+      {/* Header - Fixed at top */}
+      <header className="fixed top-0 left-0 right-0 h-14 z-50">
         <div className="absolute inset-0" style={yellowGlassStyle} />
         <div className="relative h-full flex items-center justify-between px-4">
           <UserAvatar onClick={openUserMenu} />
@@ -160,6 +160,9 @@ export default function HomePage() {
           </button>
         </div>
       </header>
+
+      {/* Spacer for fixed header */}
+      <div className="h-14 flex-shrink-0" />
 
       {/* Feed */}
       <main className="flex-1 overflow-hidden">
