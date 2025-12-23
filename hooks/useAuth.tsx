@@ -71,9 +71,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let mounted = true
 
         const initAuth = async () => {
-            logger.info('auth', 'initAuth', 'Starting auth initialization', {
-                supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...'
-            })
+            logger.info('auth', 'initAuth', 'Starting auth initialization')
+
+            // OPTIMIZATION: Check for logout flag to skip wait
+            if (typeof window !== 'undefined' && window.location.search.includes('logout=')) {
+                logger.info('auth', 'initAuth', 'Logout flag detected - skipping session restoring')
+                if (mounted) setLoading(false)
+                return
+            }
+
+            // Safety timeout: If Supabase is slow, don't block the app forever
+            const safetyTimeout = setTimeout(() => {
+                if (mounted) {
+                    logger.warn('auth', 'initAuth', 'Auth timeout - releasing loading state')
+                    setLoading(false)
+                }
+            }, 7000)
 
             try {
                 // Get initial session
@@ -91,13 +104,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         if (!profileData) {
                             logger.warn('auth', 'initAuth', 'User exists but profile missing - forcing logout', { userId: currentSession.user.id })
                             await supabase.auth.signOut()
-                            setSession(null)
-                            setUser(null)
-                            setProfile(null)
+                            if (mounted) {
+                                setSession(null)
+                                setUser(null)
+                                setProfile(null)
+                            }
                         } else {
-                            setSession(currentSession)
-                            setUser(currentSession.user)
-                            setProfile(profileData)
+                            if (mounted) {
+                                setSession(currentSession)
+                                setUser(currentSession.user)
+                                setProfile(profileData)
+                            }
                         }
                     } else {
                         logger.info('auth', 'initAuth', 'No active session')
@@ -105,11 +122,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             } catch (error) {
                 logger.error('auth', 'initAuth', 'Auth initialization failed', error)
-                // Ensure we clean up if something goes wrong
-                setSession(null)
-                setUser(null)
-                setProfile(null)
+                if (mounted) {
+                    setSession(null)
+                    setUser(null)
+                    setProfile(null)
+                }
             } finally {
+                clearTimeout(safetyTimeout)
                 if (mounted) {
                     setLoading(false)
                 }
