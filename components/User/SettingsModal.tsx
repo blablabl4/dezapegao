@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getCurrentStoredUser, updateCurrentStoredUser, type StoredUser } from '@/lib/local-storage'
+import { useAuth } from '@/hooks/useAuth'
+import { uploadAvatar } from '@/lib/storage'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -23,7 +24,7 @@ const genderOptions = [
 ]
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-    const [user, setUser] = useState<StoredUser | null>(null)
+    const { user, profile, updateProfile, refreshProfile } = useAuth()
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
     const [formData, setFormData] = useState({
         username: '',
@@ -35,62 +36,94 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         newPassword: '',
     })
     const [saving, setSaving] = useState(false)
+    const [uploadingAvatar, setUploadingAvatar] = useState(false)
     const [message, setMessage] = useState('')
+    const [error, setError] = useState('')
 
     useEffect(() => {
-        if (isOpen) {
-            const currentUser = getCurrentStoredUser()
-            if (currentUser) {
-                setUser(currentUser)
-                setAvatarPreview(currentUser.avatar_url || null)
-                setFormData({
-                    username: currentUser.username || '',
-                    email: currentUser.email || '',
-                    phone: currentUser.phone || '',
-                    gender: currentUser.gender || '',
-                    birthdate: currentUser.birthdate || '',
-                    currentPassword: '',
-                    newPassword: '',
-                })
-            }
+        if (isOpen && profile) {
+            setAvatarPreview(profile.avatar_url || null)
+            setFormData({
+                username: profile.username || '',
+                email: profile.email || user?.email || '',
+                phone: profile.phone || '',
+                gender: profile.gender || '',
+                birthdate: profile.birthdate || '',
+                currentPassword: '',
+                newPassword: '',
+            })
             setMessage('')
+            setError('')
         }
-    }, [isOpen])
+    }, [isOpen, profile, user])
 
     const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (!file) return
+        if (!file || !user) return
 
         if (file.size > 2 * 1024 * 1024) {
-            setMessage('Foto deve ter no máximo 2MB')
+            setError('Foto deve ter no máximo 2MB')
             return
         }
 
-        const reader = new FileReader()
-        reader.onloadend = () => {
-            const base64 = reader.result as string
-            setAvatarPreview(base64)
-            updateCurrentStoredUser({ avatar_url: base64 })
-            setMessage('Foto atualizada!')
+        setUploadingAvatar(true)
+        setError('')
+
+        try {
+            // Show preview immediately
+            const reader = new FileReader()
+            reader.onloadend = () => {
+                setAvatarPreview(reader.result as string)
+            }
+            reader.readAsDataURL(file)
+
+            // Upload to Supabase Storage
+            const { url, error: uploadError } = await uploadAvatar(file, user.id)
+
+            if (uploadError) {
+                setError('Erro ao enviar foto: ' + uploadError.message)
+                return
+            }
+
+            if (url) {
+                // Update profile with new avatar URL
+                await updateProfile({ avatar_url: url })
+                await refreshProfile()
+                setMessage('Foto atualizada!')
+            }
+        } catch (err) {
+            setError('Erro ao enviar foto')
+        } finally {
+            setUploadingAvatar(false)
         }
-        reader.readAsDataURL(file)
     }
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (!user) return
+
         setSaving(true)
+        setError('')
+        setMessage('')
 
-        updateCurrentStoredUser({
-            username: formData.username,
-            email: formData.email,
-            phone: formData.phone,
-            gender: formData.gender as any,
-            birthdate: formData.birthdate,
-        })
+        try {
+            const { error: updateError } = await updateProfile({
+                username: formData.username,
+                phone: formData.phone,
+                gender: formData.gender as any,
+                birthdate: formData.birthdate || null,
+            })
 
-        setTimeout(() => {
+            if (updateError) {
+                setError('Erro ao salvar: ' + updateError.message)
+            } else {
+                await refreshProfile()
+                setMessage('Dados salvos!')
+            }
+        } catch (err) {
+            setError('Erro ao salvar alterações')
+        } finally {
             setSaving(false)
-            setMessage('Dados salvos!')
-        }, 500)
+        }
     }
 
     if (!isOpen) return null
@@ -123,6 +156,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
                     )}
 
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 text-red-200 rounded-xl text-sm text-center">
+                            {error}
+                        </div>
+                    )}
+
                     {/* Avatar */}
                     <div className="flex flex-col items-center mb-6">
                         <div className="relative">
@@ -133,9 +172,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                     {formData.username?.[0]?.toUpperCase() || '?'}
                                 </div>
                             )}
-                            <label className="absolute bottom-0 right-0 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-purple-700 transition">
-                                <span className="text-white text-sm">📷</span>
-                                <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                            <label className={`absolute bottom-0 right-0 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center cursor-pointer hover:bg-purple-700 transition ${uploadingAvatar ? 'opacity-50' : ''}`}>
+                                <span className="text-white text-sm">{uploadingAvatar ? '⏳' : '📷'}</span>
+                                <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" disabled={uploadingAvatar} />
                             </label>
                         </div>
                         <p className="text-white/50 text-xs mt-2">Máx 2MB</p>
@@ -154,27 +193,27 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             />
                         </div>
 
-                        {/* Email */}
+                        {/* Email (read-only) */}
                         <div>
                             <label className="block text-sm font-medium text-white/80 mb-2">Email</label>
                             <input
                                 type="email"
                                 value={formData.email}
-                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 transition text-sm"
-                                placeholder="email@exemplo.com"
+                                readOnly
+                                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white/60 text-sm cursor-not-allowed"
                             />
+                            <p className="text-white/40 text-xs mt-1">Email não pode ser alterado</p>
                         </div>
 
                         {/* Phone */}
                         <div>
-                            <label className="block text-sm font-medium text-white/80 mb-2">Telefone</label>
+                            <label className="block text-sm font-medium text-white/80 mb-2">Telefone (WhatsApp)</label>
                             <input
                                 type="tel"
                                 value={formData.phone}
                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 transition text-sm"
-                                placeholder="+55 11 99999-9999"
+                                placeholder="11999999999"
                             />
                         </div>
 
@@ -188,8 +227,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                         type="button"
                                         onClick={() => setFormData({ ...formData, gender: opt.value })}
                                         className={`px-4 py-3 rounded-xl text-sm transition ${formData.gender === opt.value
-                                                ? 'bg-purple-500/50 border-purple-400 text-white'
-                                                : 'bg-white/10 border-white/20 text-white/70 hover:bg-white/20'
+                                            ? 'bg-purple-500/50 border-purple-400 text-white'
+                                            : 'bg-white/10 border-white/20 text-white/70 hover:bg-white/20'
                                             } border`}
                                     >
                                         {opt.label}
@@ -207,27 +246,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                                 onChange={(e) => setFormData({ ...formData, birthdate: e.target.value })}
                                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 transition text-sm"
                             />
-                        </div>
-
-                        {/* Password */}
-                        <div className="pt-4 border-t border-white/10">
-                            <h3 className="text-white font-semibold mb-4">Trocar senha</h3>
-                            <div className="space-y-3">
-                                <input
-                                    type="password"
-                                    value={formData.currentPassword}
-                                    onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 transition text-sm"
-                                    placeholder="Senha atual"
-                                />
-                                <input
-                                    type="password"
-                                    value={formData.newPassword}
-                                    onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 transition text-sm"
-                                    placeholder="Nova senha"
-                                />
-                            </div>
                         </div>
 
                         {/* Save Button */}

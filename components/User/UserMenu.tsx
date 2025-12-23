@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -22,11 +23,17 @@ interface UserMenuProps {
 export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onOpenSubscription, onOpenPayments }: UserMenuProps) {
     const router = useRouter()
     const { profile, signOut } = useAuth()
+    const [loggingOut, setLoggingOut] = useState(false)
 
     const handleLogout = async () => {
-        await signOut()
-        onClose()
-        router.refresh()
+        setLoggingOut(true)
+        try {
+            await signOut()
+            onClose()
+            router.refresh()
+        } finally {
+            setLoggingOut(false)
+        }
     }
 
     const avatarElement = profile?.avatar_url ? (
@@ -116,10 +123,11 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
                     {/* Logout */}
                     <button
                         onClick={handleLogout}
-                        className="w-full px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/20 transition flex items-center space-x-3"
+                        disabled={loggingOut}
+                        className={`w-full px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/20 transition flex items-center space-x-3 ${loggingOut ? 'opacity-50 cursor-wait' : ''}`}
                     >
-                        <span className="text-xl flex items-center justify-center">🚪</span>
-                        <span className="font-medium flex items-center">Sair</span>
+                        <span className="text-xl flex items-center justify-center">{loggingOut ? '⏳' : '🚪'}</span>
+                        <span className="font-medium flex items-center">{loggingOut ? 'Saindo...' : 'Sair'}</span>
                     </button>
                 </div>
             </div>
