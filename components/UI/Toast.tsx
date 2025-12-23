@@ -22,10 +22,22 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
         return () => clearTimeout(timer)
     }, [duration, onClose])
 
-    const bgColors = {
-        success: 'bg-green-500',
-        error: 'bg-red-500',
-        info: 'bg-blue-500',
+    const styles = {
+        success: {
+            container: 'border-green-500/30 shadow-[0_0_20px_-5px_rgba(34,197,94,0.3)]',
+            icon: 'text-green-400',
+            text: 'text-green-100'
+        },
+        error: {
+            container: 'border-red-500/30 shadow-[0_0_20px_-5px_rgba(239,68,68,0.3)]',
+            icon: 'text-red-400',
+            text: 'text-red-100'
+        },
+        info: {
+            container: 'border-blue-500/30 shadow-[0_0_20px_-5px_rgba(59,130,246,0.3)]',
+            icon: 'text-blue-400',
+            text: 'text-blue-100'
+        }
     }
 
     const icons = {
@@ -39,12 +51,16 @@ export function Toast({ message, type = 'info', duration = 3000, onClose }: Toas
             className={`fixed top-4 right-4 z-[9999] transition-all duration-300 transform ${isVisible ? 'translate-y-0 opacity-100' : '-translate-y-4 opacity-0'
                 }`}
         >
-            <div className={`${bgColors[type]} text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 min-w-[300px]`}>
+            <div className={`
+                backdrop-blur-xl bg-black/60 border 
+                ${styles[type].container}
+                px-6 py-4 rounded-2xl flex items-center gap-4 min-w-[320px] max-w-sm
+            `}>
                 <span className="text-xl">{icons[type]}</span>
-                <p className="font-medium text-sm">{message}</p>
+                <p className={`font-medium text-sm ${styles[type].text}`}>{message}</p>
                 <button
                     onClick={() => setIsVisible(false)}
-                    className="ml-auto text-white/60 hover:text-white"
+                    className="ml-auto text-white/40 hover:text-white transition"
                 >
                     ✕
                 </button>

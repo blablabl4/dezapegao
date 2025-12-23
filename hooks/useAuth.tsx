@@ -76,34 +76,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             })
 
             try {
-                // Increased timeout to 15 seconds
-                const timeout = new Promise<never>((_, reject) =>
-                    setTimeout(() => reject(new Error('Auth timeout - Supabase is slow or unreachable')), 15000)
-                )
+                // Get initial session
+                const { data: { session: currentSession }, error } = await supabase.auth.getSession()
 
-                const sessionPromise = supabase.auth.getSession()
+                if (error) throw error
 
-                const { data: { session: currentSession } } = await Promise.race([
-                    sessionPromise,
-                    timeout
-                ]) as { data: { session: any } }
+                if (mounted) {
+                    if (currentSession?.user) {
+                        logger.info('auth', 'initAuth', 'Session found', { userId: currentSession.user.id })
 
-                if (mounted && currentSession?.user) {
-                    logger.info('auth', 'initAuth', 'Session found', { userId: currentSession.user.id })
-                    setSession(currentSession)
-                    setUser(currentSession.user)
-                    // Don't wait for profile - load in background
-                    fetchProfile(currentSession.user.id).then(profileData => {
-                        if (mounted) setProfile(profileData)
-                    })
-                } else {
-                    logger.info('auth', 'initAuth', 'No active session')
+                        // Load profile - MUST await this to prevent ghost sessions
+                        const profileData = await fetchProfile(currentSession.user.id)
+
+                        if (!profileData) {
+                            logger.warn('auth', 'initAuth', 'User exists but profile missing - forcing logout', { userId: currentSession.user.id })
+                            await supabase.auth.signOut()
+                            setSession(null)
+                            setUser(null)
+                            setProfile(null)
+                        } else {
+                            setSession(currentSession)
+                            setUser(currentSession.user)
+                            setProfile(profileData)
+                        }
+                    } else {
+                        logger.info('auth', 'initAuth', 'No active session')
+                    }
                 }
             } catch (error) {
                 logger.error('auth', 'initAuth', 'Auth initialization failed', error)
+                // Ensure we clean up if something goes wrong
+                setSession(null)
+                setUser(null)
+                setProfile(null)
             } finally {
-                logger.info('auth', 'initAuth', 'Auth initialization completed')
-                if (mounted) setLoading(false)
+                if (mounted) {
+                    setLoading(false)
+                }
             }
         }
 
@@ -112,13 +121,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, newSession) => {
-                setSession(newSession)
-                setUser(newSession?.user ?? null)
-
                 if (newSession?.user) {
                     const profileData = await fetchProfile(newSession.user.id)
-                    setProfile(profileData)
+
+                    if (!profileData) {
+                        logger.warn('auth', 'onStateChange', 'User exists but profile missing - forcing logout', { userId: newSession.user.id })
+                        await supabase.auth.signOut()
+                        setSession(null)
+                        setUser(null)
+                        setProfile(null)
+                    } else {
+                        setSession(newSession)
+                        setUser(newSession.user)
+                        setProfile(profileData)
+                    }
                 } else {
+                    setSession(null)
+                    setUser(null)
                     setProfile(null)
                 }
 
