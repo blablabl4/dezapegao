@@ -12,35 +12,36 @@ export default function ResetPage() {
     useEffect(() => {
         const clearEverything = async () => {
             try {
-                // 1. Sign out from Supabase (global scope)
-                setStatus('Deslogando do Supabase...')
-                await supabase.auth.signOut({ scope: 'global' })
-
-                // 2. Clear Local Storage
-                setStatus('Limpando Local Storage...')
+                // 1. Clean Local Data IMMEDIATELY (Prioritize this)
+                setStatus('Limpando dados locais...')
                 localStorage.clear()
-
-                // 3. Clear Session Storage
-                setStatus('Limpando Session Storage...')
                 sessionStorage.clear()
 
-                // 4. Clear Cookies (basic attempt)
-                setStatus('Limpando Cookies...')
+                // Clear cookies properly
                 document.cookie.split(";").forEach((c) => {
                     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
                 });
 
-                // 5. Finalize
-                setStatus('✅ Limpeza completa! Redirecionando...')
+                // 2. Try Supabase SignOut (with timeout)
+                // We don't want to block if Supabase is down/slow
+                setStatus('Tentando deslogar remotamente...')
 
-                // Force reload to home after 2 seconds
-                setTimeout(() => {
-                    window.location.href = '/'
-                }, 2000)
+                const signOutPromise = supabase.auth.signOut({ scope: 'global' })
+                const timeoutPromise = new Promise(resolve => setTimeout(resolve, 3000))
+
+                await Promise.race([signOutPromise, timeoutPromise])
+
+                // 3. Finalize
+                setStatus('✅ Limpeza completa! Redirecionando...')
 
             } catch (error) {
                 console.error(error)
-                setStatus('❌ Erro: ' + String(error))
+                setStatus('⚠️ Aviso: ' + String(error))
+            } finally {
+                // Force redirect guarantees we leave this page
+                setTimeout(() => {
+                    window.location.href = '/'
+                }, 1000)
             }
         }
 
@@ -52,7 +53,11 @@ export default function ResetPage() {
             <div className="text-center space-y-4 p-8 bg-gray-800 rounded-xl">
                 <h1 className="text-3xl font-bold text-red-500">Reset Geral 🧹</h1>
                 <p className="text-xl animate-pulse">{status}</p>
-                <p className="text-sm text-gray-400">Isso remove todos os dados locais e desloga você.</p>
+                <div className="text-sm text-gray-400 max-w-md mx-auto">
+                    <p>1. Limpa localStorage e Cookies</p>
+                    <p>2. Tenta deslogar do Supabase (max 3s)</p>
+                    <p>3. Redireciona para Home</p>
+                </div>
             </div>
         </div>
     )
