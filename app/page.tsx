@@ -9,6 +9,7 @@ import { EditListingModal } from '@/components/Dashboard/EditListingModal'
 import { SettingsModal } from '@/components/User/SettingsModal'
 import { SubscriptionModal } from '@/components/User/SubscriptionModal'
 import { PaymentsModal } from '@/components/User/PaymentsModal'
+import { AuthModal } from '@/components/User/AuthModal'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { getStoredListings, getCurrentStoredUser, type StoredListing } from '@/lib/local-storage'
@@ -38,6 +39,8 @@ export default function HomePage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [subscriptionOpen, setSubscriptionOpen] = useState(false)
   const [paymentsOpen, setPaymentsOpen] = useState(false)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMessage, setAuthMessage] = useState('')
 
   useEffect(() => {
     setMounted(true)
@@ -68,6 +71,16 @@ export default function HomePage() {
     setUser(currentUser)
   }
 
+  // Check if user is logged in, show auth modal if not
+  const requireAuth = (action: string, callback: () => void) => {
+    if (!user) {
+      setAuthMessage(`Para ${action}, crie uma conta grátis!`)
+      setAuthOpen(true)
+      return
+    }
+    callback()
+  }
+
   const handleEdit = (id: string) => {
     setEditListingId(id)
     setEditListingOpen(true)
@@ -89,8 +102,10 @@ export default function HomePage() {
   }
 
   const openNewListing = () => {
-    closeAllModals()
-    setNewListingOpen(true)
+    requireAuth('criar anúncio', () => {
+      closeAllModals()
+      setNewListingOpen(true)
+    })
   }
 
   const openSettings = () => {
@@ -108,6 +123,12 @@ export default function HomePage() {
     setPaymentsOpen(true)
   }
 
+  const openUserMenu = () => {
+    requireAuth('acessar o menu', () => {
+      setUserMenuOpen(true)
+    })
+  }
+
   if (!mounted) {
     return null
   }
@@ -118,7 +139,7 @@ export default function HomePage() {
       <header className="flex-shrink-0 h-14 relative z-30">
         <div className="absolute inset-0" style={yellowGlassStyle} />
         <div className="relative h-full flex items-center justify-between px-4">
-          <UserAvatar onClick={() => setUserMenuOpen(true)} />
+          <UserAvatar onClick={openUserMenu} />
 
           <Link href="/" className="absolute left-1/2 -translate-x-1/2">
             <span className="text-xl font-bold text-white drop-shadow-lg">
@@ -158,12 +179,30 @@ export default function HomePage() {
             </button>
           </div>
         ) : (
-          <ReelsFeed listings={listings} userId={user?.id} />
+          <ReelsFeed
+            listings={listings}
+            userId={user?.id}
+            onRequireAuth={(action) => {
+              setAuthMessage(`Para ${action}, crie uma conta grátis!`)
+              setAuthOpen(true)
+            }}
+          />
         )}
       </main>
 
-      {/* Modals */}
-      {mounted && (
+      {/* Auth Modal - Always available */}
+      <AuthModal
+        isOpen={authOpen}
+        onClose={() => setAuthOpen(false)}
+        onSuccess={() => {
+          loadData()
+          setAuthOpen(false)
+        }}
+        message={authMessage}
+      />
+
+      {/* Other Modals - Only for authenticated users */}
+      {mounted && user && (
         <>
           <UserMenu
             isOpen={userMenuOpen}

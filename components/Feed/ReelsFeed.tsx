@@ -9,6 +9,7 @@ import type { ListingWithProfile } from '@/types/database'
 interface ReelsFeedProps {
     listings: ListingWithProfile[]
     userId?: string
+    onRequireAuth?: (action: string) => void
 }
 
 const categoryIcons: Record<string, string> = {
@@ -28,7 +29,7 @@ const glassStyle = {
     WebkitBackdropFilter: 'blur(16px)',
 }
 
-export function ReelsFeed({ listings, userId }: ReelsFeedProps) {
+export function ReelsFeed({ listings, userId, onRequireAuth }: ReelsFeedProps) {
     const [currentIndex, setCurrentIndex] = useState(0)
     const [showInfoPanel, setShowInfoPanel] = useState(false)
     const containerRef = useRef<HTMLDivElement>(null)
