@@ -1,38 +1,18 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { DEMO_MODE } from '@/lib/mock-data'
-import { getCurrentStoredUser } from '@/lib/local-storage'
-import { useEffect, useState } from 'react'
 
 interface UserAvatarProps {
     onClick: () => void
 }
 
 export function UserAvatar({ onClick }: UserAvatarProps) {
-    const { profile, loading } = useAuth()
-    const [demoUser, setDemoUser] = useState<any>(null)
-    const [mounted, setMounted] = useState(false)
+    const { profile, user, loading } = useAuth()
 
-    useEffect(() => {
-        setMounted(true)
-        if (DEMO_MODE) {
-            // Poll for demo user changes
-            const checkUser = () => {
-                setDemoUser(getCurrentStoredUser())
-            }
-            checkUser()
-            const interval = setInterval(checkUser, 1000)
-            return () => clearInterval(interval)
-        }
-    }, [])
-
-    if (!mounted) return null
-
-    // Get user data from Supabase or demo mode
-    const user = DEMO_MODE ? demoUser : profile
-    const hasAvatar = user?.avatar_url && user.avatar_url.length > 0
-    const initial = user?.username?.[0]?.toUpperCase() || '?'
+    // Get user data from profile or user metadata
+    const hasAvatar = profile?.avatar_url && profile.avatar_url.length > 0
+    const username = profile?.username || user?.user_metadata?.username || ''
+    const initial = username?.[0]?.toUpperCase() || '?'
 
     return (
         <button
@@ -42,7 +22,7 @@ export function UserAvatar({ onClick }: UserAvatarProps) {
         >
             {hasAvatar ? (
                 <img
-                    src={user.avatar_url}
+                    src={profile.avatar_url!}
                     alt="Avatar"
                     className="w-full h-full object-cover"
                 />

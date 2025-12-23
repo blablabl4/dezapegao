@@ -1,8 +1,9 @@
 'use client'
 
 import { formatPrice } from '@/lib/utils'
-import { useState, useEffect } from 'react'
-import { getStoredListings, deleteStoredListing, updateStoredListing, getCurrentStoredUser, type StoredListing } from '@/lib/local-storage'
+import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { getUserListings, deleteListing, type Listing } from '@/lib/listings'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -19,49 +20,72 @@ interface DashboardModalProps {
 }
 
 export function DashboardModal({ isOpen, onClose, onEdit, onRefresh }: DashboardModalProps) {
-    const [listings, setListings] = useState<StoredListing[]>([])
-    const [user, setUser] = useState<any>(null)
+    const { user, profile } = useAuth()
+    const [listings, setListings] = useState<Listing[]>([])
+    const [loading, setLoading] = useState(false)
+
+    const loadListings = useCallback(async () => {
+        if (!user) return
+        setLoading(true)
+        try {
+            const myListings = await getUserListings(user.id)
+            setListings(myListings)
+        } catch (error) {
+            console.error('Error loading listings:', error)
+        } finally {
+            setLoading(false)
+        }
+    }, [user])
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && user) {
             loadListings()
         }
-    }, [isOpen])
+    }, [isOpen, user, loadListings])
 
-    const loadListings = () => {
-        const currentUser = getCurrentStoredUser()
-        setUser(currentUser)
-
-        const allListings = getStoredListings()
-        const myListings = currentUser
-            ? allListings.filter(l => l.user_id === currentUser.id)
-            : allListings
-        setListings(myListings)
-    }
-
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
+        if (!user) return
         if (confirm('Excluir este anúncio?')) {
-            deleteStoredListing(id)
-            loadListings()
+            try {
+                await deleteListing(id, user.id)
+                loadListings()
+                onRefresh?.()
+            } catch (error) {
+                console.error('Error deleting listing:', error)
+            }
         }
     }
 
-    const toggleSold = (id: string) => {
+    const toggleSold = async (id: string) => {
+        if (!user) return
         const listing = listings.find(l => l.id === id)
         if (listing) {
             const newStatus = listing.status === 'active' ? 'expired' : 'active'
-            updateStoredListing(id, { status: newStatus })
-            loadListings()
+            try {
+                // Use Supabase directly for status update
+                const { createClient } = await import('@/lib/supabase/client')
+                const supabase = createClient()
+                await supabase
+                    .from('listings')
+                    .update({ status: newStatus })
+                    .eq('id', id)
+                    .eq('user_id', user.id)
+                loadListings()
+                onRefresh?.()
+            } catch (error) {
+                console.error('Error updating listing:', error)
+            }
         }
     }
 
     if (!isOpen) return null
 
-    const weeklyLimit = 3
-    const weeklyCount = listings.length
+    const planLimits = { free: 3, basic: 5, pro: 10, premium: 999 }
+    const weeklyLimit = planLimits[profile?.plan || 'free'] || 3
+    const weeklyCount = listings.filter(l => l.status === 'active').length
     const remaining = weeklyLimit - weeklyCount
-    const totalLikes = listings.reduce((sum, l) => sum + l.likes_count, 0)
-    const totalClicks = listings.reduce((sum, l) => sum + l.whatsapp_clicks, 0)
+    const totalLikes = listings.reduce((sum, l) => sum + (l.likes_count || 0), 0)
+    const totalClicks = listings.reduce((sum, l) => sum + (l.whatsapp_clicks || 0), 0)
 
     return (
         <>
@@ -113,62 +137,71 @@ export function DashboardModal({ isOpen, onClose, onEdit, onRefresh }: Dashboard
 
                     {/* Listings */}
                     <h3 className="text-lg font-semibold text-white mb-4 text-center">Anúncios</h3>
-                    <div className="grid grid-cols-2 gap-3 mb-6">
-                        {listings.length > 0 ? (
-                            listings.map((listing) => (
-                                <div key={listing.id} className="rounded-2xl p-3" style={glassStyle}>
-                                    <div className="aspect-square rounded-xl overflow-hidden bg-white/10 mb-3 relative">
-                                        <img src={listing.image_urls[0]} alt={listing.title} className="w-full h-full object-cover" />
-                                        {listing.status === 'expired' && (
-                                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                                                <span className="text-white font-bold text-center">VENDIDO</span>
-                                            </div>
-                                        )}
+
+                    {loading ? (
+                        <div className="text-center text-white/60 py-12">Carregando...</div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                            {listings.length > 0 ? (
+                                listings.map((listing) => (
+                                    <div key={listing.id} className="rounded-2xl p-3" style={glassStyle}>
+                                        <div className="aspect-square rounded-xl overflow-hidden bg-white/10 mb-3 relative">
+                                            <img
+                                                src={listing.images?.[0]?.image_url || '/placeholder.jpg'}
+                                                alt={listing.title}
+                                                className="w-full h-full object-cover"
+                                            />
+                                            {listing.status === 'expired' && (
+                                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                                    <span className="text-white font-bold text-center">VENDIDO</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <h4 className="font-medium text-white text-sm truncate mb-1 text-center">{listing.title}</h4>
+                                        <p className="text-lg font-bold text-green-400 mb-2 text-center">{formatPrice(listing.price)}</p>
+
+                                        <div className="flex items-center justify-center space-x-2 text-xs text-white/50 mb-3">
+                                            <span>❤️ {listing.likes_count || 0}</span>
+                                            <span>💬 {listing.whatsapp_clicks || 0}</span>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="space-y-1.5">
+                                            <button
+                                                onClick={() => onEdit?.(listing.id)}
+                                                className="w-full text-xs px-3 py-2 rounded-lg transition bg-white/10 text-white hover:bg-white/20 flex items-center justify-center"
+                                            >
+                                                ✏️ Editar
+                                            </button>
+
+                                            <button
+                                                onClick={() => toggleSold(listing.id)}
+                                                className={`w-full text-xs px-3 py-2 rounded-lg transition flex items-center justify-center ${listing.status === 'expired'
+                                                    ? 'bg-gray-500/30 text-gray-300'
+                                                    : 'bg-blue-500/30 text-blue-200 hover:bg-blue-500/40'
+                                                    }`}
+                                            >
+                                                {listing.status === 'expired' ? '✅ Vendido' : '📦 Vendido'}
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleDelete(listing.id)}
+                                                className="w-full text-xs text-red-400 hover:text-red-300 px-3 py-2 rounded-lg transition hover:bg-red-500/20 flex items-center justify-center"
+                                            >
+                                                🗑️ Excluir
+                                            </button>
+                                        </div>
                                     </div>
-
-                                    <h4 className="font-medium text-white text-sm truncate mb-1 text-center">{listing.title}</h4>
-                                    <p className="text-lg font-bold text-green-400 mb-2 text-center">{formatPrice(listing.price)}</p>
-
-                                    <div className="flex items-center justify-center space-x-2 text-xs text-white/50 mb-3">
-                                        <span>❤️ {listing.likes_count}</span>
-                                        <span>💬 {listing.whatsapp_clicks}</span>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div className="space-y-1.5">
-                                        <button
-                                            onClick={() => onEdit?.(listing.id)}
-                                            className="w-full text-xs px-3 py-2 rounded-lg transition bg-white/10 text-white hover:bg-white/20 flex items-center justify-center"
-                                        >
-                                            ✏️ Editar
-                                        </button>
-
-                                        <button
-                                            onClick={() => toggleSold(listing.id)}
-                                            className={`w-full text-xs px-3 py-2 rounded-lg transition flex items-center justify-center ${listing.status === 'expired'
-                                                ? 'bg-gray-500/30 text-gray-300'
-                                                : 'bg-blue-500/30 text-blue-200 hover:bg-blue-500/40'
-                                                }`}
-                                        >
-                                            {listing.status === 'expired' ? '✅ Vendido' : '📦 Vendido'}
-                                        </button>
-
-                                        <button
-                                            onClick={() => handleDelete(listing.id)}
-                                            className="w-full text-xs text-red-400 hover:text-red-300 px-3 py-2 rounded-lg transition hover:bg-red-500/20 flex items-center justify-center"
-                                        >
-                                            🗑️ Excluir
-                                        </button>
-                                    </div>
+                                ))
+                            ) : (
+                                <div className="col-span-2 text-center py-12 rounded-2xl flex flex-col items-center justify-center" style={glassStyle}>
+                                    <p className="text-4xl mb-3">📦</p>
+                                    <p className="text-white/60 text-sm">Nenhum anúncio</p>
                                 </div>
-                            ))
-                        ) : (
-                            <div className="col-span-2 text-center py-12 rounded-2xl flex flex-col items-center justify-center" style={glassStyle}>
-                                <p className="text-4xl mb-3">📦</p>
-                                <p className="text-white/60 text-sm">Nenhum anúncio</p>
-                            </div>
-                        )}
-                    </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </div>
         </>

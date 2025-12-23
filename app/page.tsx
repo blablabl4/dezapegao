@@ -14,8 +14,6 @@ import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { getActiveListings, type Listing } from '@/lib/listings'
-import { DEMO_MODE } from '@/lib/mock-data'
-import { getStoredListings, getCurrentStoredUser, type StoredListing } from '@/lib/local-storage'
 
 const glassStyle = {
   background: 'rgba(0, 0, 0, 0.4)',
@@ -45,39 +43,20 @@ export default function HomePage() {
   const [authOpen, setAuthOpen] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
 
-  // Load listings from Supabase or localStorage (demo mode)
+  // Load listings from Supabase
   const loadListings = useCallback(async () => {
     try {
-      if (DEMO_MODE) {
-        // Use localStorage for demo
-        const storedListings = getStoredListings()
-        const demoUser = getCurrentStoredUser()
-        const feedListings = storedListings
-          .filter(l => l.status === 'active')
-          .map((listing: StoredListing) => ({
-            ...listing,
-            image_url: listing.image_urls[0],
-            profiles: demoUser || {
-              id: listing.user_id,
-              username: 'Usuário',
-              phone: '+5511999999999',
-            }
-          }))
-        setListings(feedListings)
-      } else {
-        // Use Supabase
-        const supabaseListings = await getActiveListings()
-        const feedListings = supabaseListings.map((listing: Listing) => ({
-          ...listing,
-          image_url: listing.images?.[0]?.image_url || '',
-          profiles: listing.profile || {
-            id: listing.user_id,
-            username: 'Usuário',
-            phone: '',
-          }
-        }))
-        setListings(feedListings)
-      }
+      const supabaseListings = await getActiveListings()
+      const feedListings = supabaseListings.map((listing: Listing) => ({
+        ...listing,
+        image_url: listing.images?.[0]?.image_url || '',
+        profiles: listing.profile || {
+          id: listing.user_id,
+          username: 'Usuário',
+          phone: '',
+        }
+      }))
+      setListings(feedListings)
     } catch (error) {
       console.error('Error loading listings:', error)
     }
@@ -95,9 +74,7 @@ export default function HomePage() {
 
   // Check if user is logged in, show auth modal if not
   const requireAuth = (action: string, callback: () => void) => {
-    // Check both Supabase user and demo user
-    const isLoggedIn = user || (DEMO_MODE && getCurrentStoredUser())
-    if (!isLoggedIn) {
+    if (!user) {
       setAuthMessage(`Para ${action}, crie uma conta grátis!`)
       setAuthOpen(true)
       return
@@ -218,7 +195,7 @@ export default function HomePage() {
         ) : (
           <ReelsFeed
             listings={listings}
-            userId={DEMO_MODE ? getCurrentStoredUser()?.id : user?.id}
+            userId={user?.id}
             onRequireAuth={(action) => {
               setAuthMessage(`Para ${action}, crie uma conta grátis!`)
               setAuthOpen(true)

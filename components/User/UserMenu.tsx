@@ -1,7 +1,6 @@
 'use client'
 
-import { getCurrentStoredUser, clearCurrentStoredUser } from '@/lib/local-storage'
-import { useEffect, useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 
 const glassStyle = {
@@ -22,23 +21,19 @@ interface UserMenuProps {
 
 export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onOpenSubscription, onOpenPayments }: UserMenuProps) {
     const router = useRouter()
-    const [user, setUser] = useState<any>(null)
+    const { profile, signOut } = useAuth()
 
-    useEffect(() => {
-        setUser(getCurrentStoredUser())
-    }, [isOpen])
-
-    const handleLogout = () => {
-        clearCurrentStoredUser()
+    const handleLogout = async () => {
+        await signOut()
         onClose()
         router.refresh()
     }
 
-    const avatarElement = user?.avatar_url ? (
-        <img src={user.avatar_url} alt="Avatar" className="w-16 h-16 rounded-full object-cover" />
+    const avatarElement = profile?.avatar_url ? (
+        <img src={profile.avatar_url} alt="Avatar" className="w-16 h-16 rounded-full object-cover" />
     ) : (
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-pink-500 flex items-center justify-center text-white font-bold text-2xl">
-            {user?.username?.[0]?.toUpperCase() || '?'}
+            {profile?.username?.[0]?.toUpperCase() || '?'}
         </div>
     )
 
@@ -63,11 +58,11 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
                     {/* User info */}
                     <div className="mb-8">
                         {avatarElement}
-                        <h2 className="text-white font-bold text-lg mt-3">{user?.username || 'Usuário'}</h2>
-                        <p className="text-white/60 text-sm">{user?.email || 'email@exemplo.com'}</p>
+                        <h2 className="text-white font-bold text-lg mt-3">{profile?.username || 'Usuário'}</h2>
+                        <p className="text-white/60 text-sm">{profile?.email || ''}</p>
                         <div className="mt-2 px-2 py-1 bg-purple-500/30 rounded-lg inline-flex items-center justify-center gap-1">
                             <span className="text-xs flex items-center justify-center">👑</span>
-                            <span className="text-xs text-purple-200 font-medium flex items-center justify-center capitalize">{user?.plan || 'Free'}</span>
+                            <span className="text-xs text-purple-200 font-medium flex items-center justify-center capitalize">{profile?.plan || 'Free'}</span>
                         </div>
                     </div>
 

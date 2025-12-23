@@ -3,8 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { DEMO_MODE } from '@/lib/mock-data'
-import { setCurrentStoredUser } from '@/lib/local-storage'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -58,102 +56,63 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
         setLoading(true)
 
         try {
-            if (DEMO_MODE) {
-                // Demo mode - use localStorage
-                if (mode === 'signup') {
-                    if (!formData.username || !formData.email || !formData.phone) {
-                        setError('Preencha todos os campos obrigatórios')
-                        setLoading(false)
-                        return
-                    }
-                    setCurrentStoredUser({
-                        id: Date.now().toString(),
-                        username: formData.username,
-                        email: formData.email,
-                        phone: formData.phone,
-                        gender: formData.gender as any || undefined,
-                        plan: 'free',
-                    })
-                } else {
-                    if (!formData.email) {
-                        setError('Digite seu email')
-                        setLoading(false)
-                        return
-                    }
-                    setCurrentStoredUser({
-                        id: Date.now().toString(),
-                        username: formData.email.split('@')[0],
-                        email: formData.email,
-                        phone: '',
-                        plan: 'free',
-                    })
+            if (mode === 'signup') {
+                // Validate fields
+                if (!formData.username || !formData.email || !formData.phone || !formData.password) {
+                    setError('Preencha todos os campos obrigatórios')
+                    setLoading(false)
+                    return
                 }
-                setTimeout(() => {
-                    onSuccess()
-                    onClose()
-                    router.refresh()
-                }, 300)
+
+                if (formData.password.length < 6) {
+                    setError('Senha deve ter pelo menos 6 caracteres')
+                    setLoading(false)
+                    return
+                }
+
+                const { error: signUpError } = await signUp(formData.email, formData.password, {
+                    username: formData.username,
+                    phone: formData.phone,
+                    gender: formData.gender,
+                })
+
+                if (signUpError) {
+                    if (signUpError.message.includes('already registered')) {
+                        setError('Email já cadastrado. Tente fazer login.')
+                    } else {
+                        setError(signUpError.message)
+                    }
+                    setLoading(false)
+                    return
+                }
+
+                // Success - close modal and refresh
+                onSuccess()
+                onClose()
+                router.refresh()
             } else {
-                // Real Supabase Auth
-                if (mode === 'signup') {
-                    // Validate fields
-                    if (!formData.username || !formData.email || !formData.phone || !formData.password) {
-                        setError('Preencha todos os campos obrigatórios')
-                        setLoading(false)
-                        return
-                    }
-
-                    if (formData.password.length < 6) {
-                        setError('Senha deve ter pelo menos 6 caracteres')
-                        setLoading(false)
-                        return
-                    }
-
-                    const { error: signUpError } = await signUp(formData.email, formData.password, {
-                        username: formData.username,
-                        phone: formData.phone,
-                        gender: formData.gender,
-                    })
-
-                    if (signUpError) {
-                        if (signUpError.message.includes('already registered')) {
-                            setError('Email já cadastrado. Tente fazer login.')
-                        } else {
-                            setError(signUpError.message)
-                        }
-                        setLoading(false)
-                        return
-                    }
-
-                    setSuccess('Conta criada! Verifique seu email para confirmar.')
-                    setTimeout(() => {
-                        resetForm()
-                        setMode('login')
-                    }, 2000)
-                } else {
-                    // Login
-                    if (!formData.email || !formData.password) {
-                        setError('Digite email e senha')
-                        setLoading(false)
-                        return
-                    }
-
-                    const { error: signInError } = await signIn(formData.email, formData.password)
-
-                    if (signInError) {
-                        if (signInError.message.includes('Invalid login')) {
-                            setError('Email ou senha incorretos')
-                        } else {
-                            setError(signInError.message)
-                        }
-                        setLoading(false)
-                        return
-                    }
-
-                    onSuccess()
-                    onClose()
-                    router.refresh()
+                // Login
+                if (!formData.email || !formData.password) {
+                    setError('Digite email e senha')
+                    setLoading(false)
+                    return
                 }
+
+                const { error: signInError } = await signIn(formData.email, formData.password)
+
+                if (signInError) {
+                    if (signInError.message.includes('Invalid login')) {
+                        setError('Email ou senha incorretos')
+                    } else {
+                        setError(signInError.message)
+                    }
+                    setLoading(false)
+                    return
+                }
+
+                onSuccess()
+                onClose()
+                router.refresh()
             }
         } catch (err) {
             setError('Erro inesperado. Tente novamente.')
