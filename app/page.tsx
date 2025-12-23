@@ -1,65 +1,222 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { ReelsFeed } from '@/components/Feed/ReelsFeed'
+import { UserAvatar } from '@/components/User/UserAvatar'
+import { UserMenu } from '@/components/User/UserMenu'
+import { DashboardModal } from '@/components/Dashboard/DashboardModal'
+import { NewListingModal } from '@/components/Dashboard/NewListingModal'
+import { EditListingModal } from '@/components/Dashboard/EditListingModal'
+import { SettingsModal } from '@/components/User/SettingsModal'
+import { SubscriptionModal } from '@/components/User/SubscriptionModal'
+import { PaymentsModal } from '@/components/User/PaymentsModal'
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { getStoredListings, getCurrentStoredUser, type StoredListing } from '@/lib/local-storage'
+
+const glassStyle = {
+  background: 'rgba(0, 0, 0, 0.4)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
+}
+
+const yellowGlassStyle = {
+  background: 'rgba(250, 204, 21, 0.4)',
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
+  borderBottom: '1px solid rgba(255,255,255,0.2)',
+}
+
+export default function HomePage() {
+  const [mounted, setMounted] = useState(false)
+  const [listings, setListings] = useState<any[]>([])
+  const [user, setUser] = useState<any>(null)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [dashboardOpen, setDashboardOpen] = useState(false)
+  const [newListingOpen, setNewListingOpen] = useState(false)
+  const [editListingOpen, setEditListingOpen] = useState(false)
+  const [editListingId, setEditListingId] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [subscriptionOpen, setSubscriptionOpen] = useState(false)
+  const [paymentsOpen, setPaymentsOpen] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    try {
+      loadData()
+    } catch (error) {
+      console.error('Error loading data:', error)
+    }
+  }, [])
+
+  const loadData = () => {
+    const storedListings = getStoredListings()
+    const currentUser = getCurrentStoredUser()
+
+    const feedListings = storedListings
+      .filter(l => l.status === 'active')
+      .map((listing: StoredListing) => ({
+        ...listing,
+        image_url: listing.image_urls[0],
+        profiles: currentUser || {
+          id: listing.user_id,
+          username: 'Usuário',
+          phone: '+5511999999999',
+        }
+      }))
+
+    setListings(feedListings)
+    setUser(currentUser)
+  }
+
+  const handleEdit = (id: string) => {
+    setEditListingId(id)
+    setEditListingOpen(true)
+    setDashboardOpen(false)
+  }
+
+  const closeAllModals = () => {
+    setDashboardOpen(false)
+    setNewListingOpen(false)
+    setEditListingOpen(false)
+    setSettingsOpen(false)
+    setSubscriptionOpen(false)
+    setPaymentsOpen(false)
+  }
+
+  const openDashboard = () => {
+    closeAllModals()
+    setDashboardOpen(true)
+  }
+
+  const openNewListing = () => {
+    closeAllModals()
+    setNewListingOpen(true)
+  }
+
+  const openSettings = () => {
+    closeAllModals()
+    setSettingsOpen(true)
+  }
+
+  const openSubscription = () => {
+    closeAllModals()
+    setSubscriptionOpen(true)
+  }
+
+  const openPayments = () => {
+    closeAllModals()
+    setPaymentsOpen(true)
+  }
+
+  if (!mounted) {
+    return null
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="flex flex-col h-screen">
+      {/* Header */}
+      <header className="flex-shrink-0 h-14 relative z-30">
+        <div className="absolute inset-0" style={yellowGlassStyle} />
+        <div className="relative h-full flex items-center justify-between px-4">
+          <UserAvatar onClick={() => setUserMenuOpen(true)} />
+
+          <Link href="/" className="absolute left-1/2 -translate-x-1/2">
+            <span className="text-xl font-bold text-white drop-shadow-lg">
+              Dezapegão
+            </span>
+          </Link>
+
+          <button
+            onClick={openNewListing}
+            className="w-10 h-10 rounded-full hover:bg-white/10 transition"
+            style={glassStyle}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div className="w-full h-full flex items-center justify-center">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </div>
+          </button>
         </div>
+      </header>
+
+      {/* Feed */}
+      <main className="flex-1 overflow-hidden">
+        {listings.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400 px-4">
+            <h2 className="text-3xl font-bold text-white mb-2 text-center">
+              Nenhum anúncio 📦
+            </h2>
+            <p className="text-white/80 mb-8 text-center">
+              Seja o primeiro!
+            </p>
+            <button
+              onClick={openNewListing}
+              className="bg-white text-purple-600 px-6 py-3 rounded-full font-semibold hover:bg-white/90 transition shadow-lg text-center"
+            >
+              Criar anúncio
+            </button>
+          </div>
+        ) : (
+          <ReelsFeed listings={listings} userId={user?.id} />
+        )}
       </main>
+
+      {/* Modals */}
+      {mounted && (
+        <>
+          <UserMenu
+            isOpen={userMenuOpen}
+            onClose={() => setUserMenuOpen(false)}
+            onOpenDashboard={openDashboard}
+            onOpenSettings={openSettings}
+            onOpenSubscription={openSubscription}
+            onOpenPayments={openPayments}
+          />
+
+          <DashboardModal
+            isOpen={dashboardOpen}
+            onClose={() => {
+              setDashboardOpen(false)
+              loadData()
+            }}
+            onEdit={handleEdit}
+          />
+
+          <NewListingModal
+            isOpen={newListingOpen}
+            onClose={() => {
+              setNewListingOpen(false)
+              loadData()
+            }}
+          />
+
+          <EditListingModal
+            isOpen={editListingOpen}
+            onClose={() => {
+              setEditListingOpen(false)
+              setEditListingId(null)
+              loadData()
+            }}
+            listingId={editListingId}
+          />
+
+          <SettingsModal
+            isOpen={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+          />
+
+          <SubscriptionModal
+            isOpen={subscriptionOpen}
+            onClose={() => setSubscriptionOpen(false)}
+          />
+
+          <PaymentsModal
+            isOpen={paymentsOpen}
+            onClose={() => setPaymentsOpen(false)}
+          />
+        </>
+      )}
     </div>
-  );
+  )
 }
