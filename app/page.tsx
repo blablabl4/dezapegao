@@ -95,7 +95,8 @@ export default function HomePage() {
 
   // Check if user is logged in, show auth modal if not
   const requireAuth = (action: string, callback: () => void) => {
-    const isLoggedIn = DEMO_MODE ? getCurrentStoredUser() : user
+    // Check both Supabase user and demo user
+    const isLoggedIn = user || (DEMO_MODE && getCurrentStoredUser())
     if (!isLoggedIn) {
       setAuthMessage(`Para ${action}, crie uma conta grátis!`)
       setAuthOpen(true)
