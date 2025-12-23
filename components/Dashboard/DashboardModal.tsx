@@ -15,9 +15,10 @@ interface DashboardModalProps {
     isOpen: boolean
     onClose: () => void
     onEdit?: (listingId: string) => void
+    onRefresh?: () => void
 }
 
-export function DashboardModal({ isOpen, onClose, onEdit }: DashboardModalProps) {
+export function DashboardModal({ isOpen, onClose, onEdit, onRefresh }: DashboardModalProps) {
     const [listings, setListings] = useState<StoredListing[]>([])
     const [user, setUser] = useState<any>(null)
 
@@ -145,8 +146,8 @@ export function DashboardModal({ isOpen, onClose, onEdit }: DashboardModalProps)
                                         <button
                                             onClick={() => toggleSold(listing.id)}
                                             className={`w-full text-xs px-3 py-2 rounded-lg transition flex items-center justify-center ${listing.status === 'expired'
-                                                    ? 'bg-gray-500/30 text-gray-300'
-                                                    : 'bg-blue-500/30 text-blue-200 hover:bg-blue-500/40'
+                                                ? 'bg-gray-500/30 text-gray-300'
+                                                : 'bg-blue-500/30 text-blue-200 hover:bg-blue-500/40'
                                                 }`}
                                         >
                                             {listing.status === 'expired' ? '✅ Vendido' : '📦 Vendido'}
