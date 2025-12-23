@@ -11,7 +11,10 @@ import { SubscriptionModal } from '@/components/User/SubscriptionModal'
 import { PaymentsModal } from '@/components/User/PaymentsModal'
 import { AuthModal } from '@/components/User/AuthModal'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { getActiveListings, type Listing } from '@/lib/listings'
+import { DEMO_MODE } from '@/lib/mock-data'
 import { getStoredListings, getCurrentStoredUser, type StoredListing } from '@/lib/local-storage'
 
 const glassStyle = {
@@ -28,9 +31,9 @@ const yellowGlassStyle = {
 }
 
 export default function HomePage() {
+  const { user, profile, loading } = useAuth()
   const [mounted, setMounted] = useState(false)
   const [listings, setListings] = useState<any[]>([])
-  const [user, setUser] = useState<any>(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [dashboardOpen, setDashboardOpen] = useState(false)
   const [newListingOpen, setNewListingOpen] = useState(false)
@@ -42,38 +45,58 @@ export default function HomePage() {
   const [authOpen, setAuthOpen] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
 
-  useEffect(() => {
-    setMounted(true)
+  // Load listings from Supabase or localStorage (demo mode)
+  const loadListings = useCallback(async () => {
     try {
-      loadData()
+      if (DEMO_MODE) {
+        // Use localStorage for demo
+        const storedListings = getStoredListings()
+        const demoUser = getCurrentStoredUser()
+        const feedListings = storedListings
+          .filter(l => l.status === 'active')
+          .map((listing: StoredListing) => ({
+            ...listing,
+            image_url: listing.image_urls[0],
+            profiles: demoUser || {
+              id: listing.user_id,
+              username: 'Usuário',
+              phone: '+5511999999999',
+            }
+          }))
+        setListings(feedListings)
+      } else {
+        // Use Supabase
+        const supabaseListings = await getActiveListings()
+        const feedListings = supabaseListings.map((listing: Listing) => ({
+          ...listing,
+          image_url: listing.images?.[0]?.image_url || '',
+          profiles: listing.profile || {
+            id: listing.user_id,
+            username: 'Usuário',
+            phone: '',
+          }
+        }))
+        setListings(feedListings)
+      }
     } catch (error) {
-      console.error('Error loading data:', error)
+      console.error('Error loading listings:', error)
     }
   }, [])
 
-  const loadData = () => {
-    const storedListings = getStoredListings()
-    const currentUser = getCurrentStoredUser()
+  useEffect(() => {
+    setMounted(true)
+    loadListings()
+  }, [loadListings])
 
-    const feedListings = storedListings
-      .filter(l => l.status === 'active')
-      .map((listing: StoredListing) => ({
-        ...listing,
-        image_url: listing.image_urls[0],
-        profiles: currentUser || {
-          id: listing.user_id,
-          username: 'Usuário',
-          phone: '+5511999999999',
-        }
-      }))
-
-    setListings(feedListings)
-    setUser(currentUser)
+  // Refresh listings when modals close
+  const refreshListings = () => {
+    loadListings()
   }
 
   // Check if user is logged in, show auth modal if not
   const requireAuth = (action: string, callback: () => void) => {
-    if (!user) {
+    const isLoggedIn = DEMO_MODE ? getCurrentStoredUser() : user
+    if (!isLoggedIn) {
       setAuthMessage(`Para ${action}, crie uma conta grátis!`)
       setAuthOpen(true)
       return
@@ -129,8 +152,18 @@ export default function HomePage() {
     })
   }
 
-  if (!mounted) {
-    return null
+  const handleAuthSuccess = () => {
+    refreshListings()
+  }
+
+  if (!mounted || loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400">
+        <div className="text-white text-xl font-semibold animate-pulse">
+          Carregando...
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -178,13 +211,13 @@ export default function HomePage() {
               onClick={openNewListing}
               className="bg-white text-purple-600 px-6 py-3 rounded-full font-semibold hover:bg-white/90 transition shadow-lg text-center"
             >
-              Criar anúncio
+              Criar primeiro anúncio
             </button>
           </div>
         ) : (
           <ReelsFeed
             listings={listings}
-            userId={user?.id}
+            userId={DEMO_MODE ? getCurrentStoredUser()?.id : user?.id}
             onRequireAuth={(action) => {
               setAuthMessage(`Para ${action}, crie uma conta grátis!`)
               setAuthOpen(true)
@@ -193,72 +226,61 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Auth Modal - Always available */}
+      {/* Modals */}
+      <UserMenu
+        isOpen={userMenuOpen}
+        onClose={() => setUserMenuOpen(false)}
+        onOpenDashboard={openDashboard}
+        onOpenSettings={openSettings}
+        onOpenSubscription={openSubscription}
+        onOpenPayments={openPayments}
+      />
+
+      <DashboardModal
+        isOpen={dashboardOpen}
+        onClose={() => setDashboardOpen(false)}
+        onEdit={handleEdit}
+        onRefresh={refreshListings}
+      />
+
+      <NewListingModal
+        isOpen={newListingOpen}
+        onClose={() => {
+          setNewListingOpen(false)
+          refreshListings()
+        }}
+      />
+
+      <EditListingModal
+        isOpen={editListingOpen}
+        onClose={() => {
+          setEditListingOpen(false)
+          refreshListings()
+        }}
+        listingId={editListingId}
+      />
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
+
+      <SubscriptionModal
+        isOpen={subscriptionOpen}
+        onClose={() => setSubscriptionOpen(false)}
+      />
+
+      <PaymentsModal
+        isOpen={paymentsOpen}
+        onClose={() => setPaymentsOpen(false)}
+      />
+
       <AuthModal
         isOpen={authOpen}
         onClose={() => setAuthOpen(false)}
-        onSuccess={() => {
-          loadData()
-          setAuthOpen(false)
-        }}
+        onSuccess={handleAuthSuccess}
         message={authMessage}
       />
-
-      {/* Other Modals - Only for authenticated users */}
-      {mounted && user && (
-        <>
-          <UserMenu
-            isOpen={userMenuOpen}
-            onClose={() => setUserMenuOpen(false)}
-            onOpenDashboard={openDashboard}
-            onOpenSettings={openSettings}
-            onOpenSubscription={openSubscription}
-            onOpenPayments={openPayments}
-          />
-
-          <DashboardModal
-            isOpen={dashboardOpen}
-            onClose={() => {
-              setDashboardOpen(false)
-              loadData()
-            }}
-            onEdit={handleEdit}
-          />
-
-          <NewListingModal
-            isOpen={newListingOpen}
-            onClose={() => {
-              setNewListingOpen(false)
-              loadData()
-            }}
-          />
-
-          <EditListingModal
-            isOpen={editListingOpen}
-            onClose={() => {
-              setEditListingOpen(false)
-              setEditListingId(null)
-              loadData()
-            }}
-            listingId={editListingId}
-          />
-
-          <SettingsModal
-            isOpen={settingsOpen}
-            onClose={() => setSettingsOpen(false)}
-          />
-
-          <SubscriptionModal
-            isOpen={subscriptionOpen}
-            onClose={() => setSubscriptionOpen(false)}
-          />
-
-          <PaymentsModal
-            isOpen={paymentsOpen}
-            onClose={() => setPaymentsOpen(false)}
-          />
-        </>
-      )}
     </div>
   )
 }

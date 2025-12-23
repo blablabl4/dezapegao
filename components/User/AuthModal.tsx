@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
+import { DEMO_MODE } from '@/lib/mock-data'
 import { setCurrentStoredUser } from '@/lib/local-storage'
 
 const glassStyle = {
@@ -26,6 +28,7 @@ interface AuthModalProps {
 
 export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProps) {
     const router = useRouter()
+    const { signUp, signIn } = useAuth()
     const [mode, setMode] = useState<'login' | 'signup'>('signup')
     const [formData, setFormData] = useState({
         email: '',
@@ -35,60 +38,126 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
         gender: '',
     })
     const [error, setError] = useState('')
+    const [success, setSuccess] = useState('')
     const [loading, setLoading] = useState(false)
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value })
     }
 
+    const resetForm = () => {
+        setFormData({ email: '', password: '', username: '', phone: '', gender: '' })
+        setError('')
+        setSuccess('')
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
+        setSuccess('')
         setLoading(true)
 
         try {
-            if (mode === 'signup') {
-                // Validate required fields
-                if (!formData.username || !formData.email || !formData.phone) {
-                    setError('Preencha todos os campos obrigatórios')
-                    setLoading(false)
-                    return
+            if (DEMO_MODE) {
+                // Demo mode - use localStorage
+                if (mode === 'signup') {
+                    if (!formData.username || !formData.email || !formData.phone) {
+                        setError('Preencha todos os campos obrigatórios')
+                        setLoading(false)
+                        return
+                    }
+                    setCurrentStoredUser({
+                        id: Date.now().toString(),
+                        username: formData.username,
+                        email: formData.email,
+                        phone: formData.phone,
+                        gender: formData.gender as any || undefined,
+                        plan: 'free',
+                    })
+                } else {
+                    if (!formData.email) {
+                        setError('Digite seu email')
+                        setLoading(false)
+                        return
+                    }
+                    setCurrentStoredUser({
+                        id: Date.now().toString(),
+                        username: formData.email.split('@')[0],
+                        email: formData.email,
+                        phone: '',
+                        plan: 'free',
+                    })
                 }
-
-                // Create user in localStorage (demo mode)
-                setCurrentStoredUser({
-                    id: Date.now().toString(),
-                    username: formData.username,
-                    email: formData.email,
-                    phone: formData.phone,
-                    gender: formData.gender as any || undefined,
-                    plan: 'free',
-                })
+                setTimeout(() => {
+                    onSuccess()
+                    onClose()
+                    router.refresh()
+                }, 300)
             } else {
-                // Login - just check if email exists (demo)
-                if (!formData.email) {
-                    setError('Digite seu email')
-                    setLoading(false)
-                    return
+                // Real Supabase Auth
+                if (mode === 'signup') {
+                    // Validate fields
+                    if (!formData.username || !formData.email || !formData.phone || !formData.password) {
+                        setError('Preencha todos os campos obrigatórios')
+                        setLoading(false)
+                        return
+                    }
+
+                    if (formData.password.length < 6) {
+                        setError('Senha deve ter pelo menos 6 caracteres')
+                        setLoading(false)
+                        return
+                    }
+
+                    const { error: signUpError } = await signUp(formData.email, formData.password, {
+                        username: formData.username,
+                        phone: formData.phone,
+                        gender: formData.gender,
+                    })
+
+                    if (signUpError) {
+                        if (signUpError.message.includes('already registered')) {
+                            setError('Email já cadastrado. Tente fazer login.')
+                        } else {
+                            setError(signUpError.message)
+                        }
+                        setLoading(false)
+                        return
+                    }
+
+                    setSuccess('Conta criada! Verifique seu email para confirmar.')
+                    setTimeout(() => {
+                        resetForm()
+                        setMode('login')
+                    }, 2000)
+                } else {
+                    // Login
+                    if (!formData.email || !formData.password) {
+                        setError('Digite email e senha')
+                        setLoading(false)
+                        return
+                    }
+
+                    const { error: signInError } = await signIn(formData.email, formData.password)
+
+                    if (signInError) {
+                        if (signInError.message.includes('Invalid login')) {
+                            setError('Email ou senha incorretos')
+                        } else {
+                            setError(signInError.message)
+                        }
+                        setLoading(false)
+                        return
+                    }
+
+                    onSuccess()
+                    onClose()
+                    router.refresh()
                 }
-
-                // Demo login - create user with email
-                setCurrentStoredUser({
-                    id: Date.now().toString(),
-                    username: formData.email.split('@')[0],
-                    email: formData.email,
-                    phone: '',
-                    plan: 'free',
-                })
             }
-
-            setTimeout(() => {
-                onSuccess()
-                onClose()
-                router.refresh()
-            }, 300)
         } catch (err) {
-            setError('Erro. Tente novamente.')
+            setError('Erro inesperado. Tente novamente.')
+        } finally {
             setLoading(false)
         }
     }
@@ -105,7 +174,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
 
             <div className="fixed inset-0 z-[210] flex items-center justify-center p-4">
                 <div
-                    className="w-full max-w-sm rounded-3xl p-6 border border-white/10"
+                    className="w-full max-w-sm rounded-3xl p-6 border border-white/10 relative"
                     style={glassStyle}
                     onClick={(e) => e.stopPropagation()}
                 >
@@ -132,14 +201,21 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                             </div>
                         )}
 
+                        {success && (
+                            <div className="bg-green-500/20 border border-green-500/30 text-green-200 px-4 py-2 rounded-xl text-sm text-center">
+                                {success}
+                            </div>
+                        )}
+
                         {mode === 'signup' && (
                             <input
                                 name="username"
                                 type="text"
                                 value={formData.username}
                                 onChange={handleChange}
-                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-sm"
+                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
                                 placeholder="Nome de usuário"
+                                autoComplete="username"
                             />
                         )}
 
@@ -148,8 +224,9 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                             type="email"
                             value={formData.email}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-sm"
+                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
                             placeholder="seu@email.com"
+                            autoComplete="email"
                         />
 
                         {mode === 'signup' && (
@@ -159,8 +236,9 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                                     type="tel"
                                     value={formData.phone}
                                     onChange={handleChange}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-sm"
-                                    placeholder="WhatsApp: +5511999999999"
+                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
+                                    placeholder="WhatsApp: 11999999999"
+                                    autoComplete="tel"
                                 />
 
                                 <div className="flex gap-2">
@@ -170,8 +248,8 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                                             type="button"
                                             onClick={() => setFormData({ ...formData, gender: opt.value })}
                                             className={`flex-1 py-2 rounded-xl text-sm transition ${formData.gender === opt.value
-                                                    ? 'bg-purple-500/50 border-purple-400 text-white'
-                                                    : 'bg-white/10 border-white/20 text-white/70'
+                                                ? 'bg-purple-500/50 border-purple-400 text-white'
+                                                : 'bg-white/10 border-white/20 text-white/70'
                                                 } border`}
                                         >
                                             {opt.label}
@@ -186,8 +264,9 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                             type="password"
                             value={formData.password}
                             onChange={handleChange}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-sm"
-                            placeholder="Senha"
+                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
+                            placeholder={mode === 'signup' ? 'Criar senha (mín. 6 caracteres)' : 'Senha'}
+                            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                         />
 
                         <button
@@ -203,14 +282,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                         {mode === 'signup' ? (
                             <p className="text-white/60 text-sm">
                                 Já tem conta?{' '}
-                                <button onClick={() => setMode('login')} className="text-white font-semibold hover:underline">
+                                <button onClick={() => { setMode('login'); resetForm(); }} className="text-white font-semibold hover:underline">
                                     Entrar
                                 </button>
                             </p>
                         ) : (
                             <p className="text-white/60 text-sm">
                                 Não tem conta?{' '}
-                                <button onClick={() => setMode('signup')} className="text-white font-semibold hover:underline">
+                                <button onClick={() => { setMode('signup'); resetForm(); }} className="text-white font-semibold hover:underline">
                                     Criar grátis
                                 </button>
                             </p>
