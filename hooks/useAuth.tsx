@@ -194,7 +194,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signOut = async () => {
         logger.info('auth', 'signOut', 'Starting signOut')
         try {
-            const { error } = await supabase.auth.signOut()
+            // Use scope: 'global' to sign out from all devices
+            const { error } = await supabase.auth.signOut({ scope: 'global' })
             if (error) {
                 logger.error('auth', 'signOut', 'Supabase signOut error', error)
             } else {
@@ -203,10 +204,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             logger.error('auth', 'signOut', 'Critical signOut error', error)
         }
+
+        // Clear all Supabase-related localStorage items
+        if (typeof window !== 'undefined') {
+            const keysToRemove = Object.keys(localStorage).filter(key =>
+                key.startsWith('sb-') || key.includes('supabase')
+            )
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key)
+                logger.debug('auth', 'signOut', `Removed localStorage key: ${key}`)
+            })
+        }
+
         setUser(null)
         setProfile(null)
         setSession(null)
-        logger.info('auth', 'signOut', 'State cleared')
+        logger.info('auth', 'signOut', 'State and storage cleared')
     }
 
     // Update profile
