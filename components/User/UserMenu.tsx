@@ -1,7 +1,6 @@
 'use client'
 
 import { useAuth } from '@/hooks/useAuth'
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 const glassStyle = {
@@ -21,7 +20,6 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onOpenSubscription, onOpenPayments }: UserMenuProps) {
-    const router = useRouter()
     const { profile, signOut } = useAuth()
     const [loggingOut, setLoggingOut] = useState(false)
 
@@ -30,8 +28,10 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
         try {
             await signOut()
             onClose()
-            router.refresh()
-        } finally {
+            // Full page reload to clear all cached state
+            window.location.href = '/'
+        } catch (error) {
+            console.error('Logout error:', error)
             setLoggingOut(false)
         }
     }
