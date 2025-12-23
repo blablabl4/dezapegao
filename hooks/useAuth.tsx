@@ -221,9 +221,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null)
         logger.info('auth', 'signOut', 'State and storage cleared')
 
+        // Force cookie cleanup (aggressive)
+        if (typeof document !== 'undefined') {
+            document.cookie.split(";").forEach((c) => {
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+            });
+        }
+
         // Force reload to ensure clean state (avoids caching issues)
         if (typeof window !== 'undefined') {
-            window.location.href = '/'
+            window.location.href = '/?logout=' + Date.now()
         }
     }
 

@@ -81,7 +81,7 @@ export function UserMenu({ isOpen, onClose, onOpenDashboard, onOpenSettings, onO
                     <div className="mb-8">
                         {avatarElement}
                         <h2 className="text-white font-bold text-lg mt-3">{profile?.username || 'Usuário'}</h2>
-                        <p className="text-white/60 text-sm">{profile?.email || ''}</p>
+                        <p className="text-white/60 text-sm">@{profile?.username || ''}</p>
                         <div className="mt-2 px-2 py-1 bg-purple-500/30 rounded-lg inline-flex items-center justify-center gap-1">
                             <span className="text-xs flex items-center justify-center">👑</span>
                             <span className="text-xs text-purple-200 font-medium flex items-center justify-center capitalize">{profile?.plan || 'Free'}</span>
