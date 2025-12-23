@@ -131,6 +131,12 @@ export type Like = Database['public']['Tables']['likes']['Row']
 // Types with relations
 export type ListingWithProfile = Listing & {
     profiles: Profile
+    location?: {
+        cep: string
+        bairro: string
+        cidade: string
+        estado: string
+    }
 }
 
 export type ListingWithLikes = Listing & {
