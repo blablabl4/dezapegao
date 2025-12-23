@@ -56,29 +56,44 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
         setLoading(true)
 
         try {
+            // Clean phone number (keep only digits)
+            const cleanPhone = formData.phone.replace(/\D/g, '')
+
+            // Validation
+            if (cleanPhone.length < 10 || cleanPhone.length > 11) {
+                setError('Telefone inválido. Use DDD + Número (ex: 11999999999)')
+                setLoading(false)
+                return
+            }
+
+            if (!formData.password || formData.password.length < 6) {
+                setError('Senha deve ter pelo menos 6 caracteres')
+                setLoading(false)
+                return
+            }
+
+            // Generate synthetic email for Supabase Auth
+            // Format: 55 + DDD + Number @dezapegao.com
+            // If user typed 55 prefix locally, handle it, but usually Brazilians type 11...
+            // Let's assume input is DDD + Number (10 or 11 digits)
+            const emailAuth = `55${cleanPhone}@dezapegao.com`
+
             if (mode === 'signup') {
-                // Validate fields
-                if (!formData.username || !formData.email || !formData.phone || !formData.password) {
-                    setError('Preencha todos os campos obrigatórios')
+                if (!formData.username) {
+                    setError('Digite seu nome de usuário')
                     setLoading(false)
                     return
                 }
 
-                if (formData.password.length < 6) {
-                    setError('Senha deve ter pelo menos 6 caracteres')
-                    setLoading(false)
-                    return
-                }
-
-                const { error: signUpError } = await signUp(formData.email, formData.password, {
+                const { error: signUpError } = await signUp(emailAuth, formData.password, {
                     username: formData.username,
-                    phone: formData.phone,
-                    gender: formData.gender,
+                    phone: cleanPhone, // Save pure number
+                    gender: formData.gender || 'other',
                 })
 
                 if (signUpError) {
                     if (signUpError.message.includes('already registered')) {
-                        setError('Email já cadastrado. Tente fazer login.')
+                        setError('Telefone já cadastrado. Tente entrar.')
                     } else {
                         setError(signUpError.message)
                     }
@@ -86,23 +101,16 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                     return
                 }
 
-                // Success - close modal and refresh
                 onSuccess()
                 onClose()
                 router.refresh()
             } else {
                 // Login
-                if (!formData.email || !formData.password) {
-                    setError('Digite email e senha')
-                    setLoading(false)
-                    return
-                }
-
-                const { error: signInError } = await signIn(formData.email, formData.password)
+                const { error: signInError } = await signIn(emailAuth, formData.password)
 
                 if (signInError) {
                     if (signInError.message.includes('Invalid login')) {
-                        setError('Email ou senha incorretos')
+                        setError('Telefone ou senha incorretos')
                     } else {
                         setError(signInError.message)
                     }
@@ -166,6 +174,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                             </div>
                         )}
 
+                        {/* Username only for Signup */}
                         {mode === 'signup' && (
                             <input
                                 name="username"
@@ -178,55 +187,51 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                             />
                         )}
 
-                        <input
-                            name="email"
-                            type="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
-                            placeholder="seu@email.com"
-                            autoComplete="email"
-                        />
+                        {/* Phone Number - ALWAYS VISIBLE */}
+                        <div className="space-y-1">
+                            <label className="text-xs text-white/60 ml-2">WhatsApp / Telefone</label>
+                            <input
+                                name="phone"
+                                type="tel"
+                                value={formData.phone}
+                                onChange={handleChange}
+                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
+                                placeholder="DDD + Número (ex: 11999999999)"
+                                autoComplete="tel"
+                            />
+                        </div>
 
+                        {/* Gender only for Signup */}
                         {mode === 'signup' && (
-                            <>
-                                <input
-                                    name="phone"
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={handleChange}
-                                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
-                                    placeholder="WhatsApp: 11999999999"
-                                    autoComplete="tel"
-                                />
-
-                                <div className="flex gap-2">
-                                    {genderOptions.map((opt) => (
-                                        <button
-                                            key={opt.value}
-                                            type="button"
-                                            onClick={() => setFormData({ ...formData, gender: opt.value })}
-                                            className={`flex-1 py-2 rounded-xl text-sm transition ${formData.gender === opt.value
-                                                ? 'bg-purple-500/50 border-purple-400 text-white'
-                                                : 'bg-white/10 border-white/20 text-white/70'
-                                                } border`}
-                                        >
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </>
+                            <div className="flex gap-2">
+                                {genderOptions.map((opt) => (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, gender: opt.value })}
+                                        className={`flex-1 py-2 rounded-xl text-sm transition ${formData.gender === opt.value
+                                            ? 'bg-purple-500/50 border-purple-400 text-white'
+                                            : 'bg-white/10 border-white/20 text-white/70'
+                                            } border`}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
                         )}
 
-                        <input
-                            name="password"
-                            type="password"
-                            value={formData.password}
-                            onChange={handleChange}
-                            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
-                            placeholder={mode === 'signup' ? 'Criar senha (mín. 6 caracteres)' : 'Senha'}
-                            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                        />
+                        <div className="space-y-1">
+                            <label className="text-xs text-white/60 ml-2">Senha</label>
+                            <input
+                                name="password"
+                                type="password"
+                                value={formData.password}
+                                onChange={handleChange}
+                                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 text-base"
+                                placeholder={mode === 'signup' ? 'Criar senha (mín. 6 caracteres)' : 'Sua senha'}
+                                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                            />
+                        </div>
 
                         <button
                             type="submit"

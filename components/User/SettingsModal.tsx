@@ -106,21 +106,31 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setMessage('')
 
         try {
-            const { error: updateError } = await updateProfile({
+            // Create a timeout promise
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Tempo limite excedido. Tente novamente.')), 10000)
+            )
+
+            const updatePromise = updateProfile({
                 username: formData.username,
                 phone: formData.phone,
                 gender: formData.gender as any,
                 birthdate: formData.birthdate || null,
             })
 
+            // Race between update and timeout
+            const { error: updateError } = await Promise.race([updatePromise, timeoutPromise]) as any
+
             if (updateError) {
                 setError('Erro ao salvar: ' + updateError.message)
             } else {
-                await refreshProfile()
+                // Refresh profile in background to avoid UI hang
+                refreshProfile().catch(console.error)
                 setMessage('Dados salvos!')
             }
-        } catch (err) {
-            setError('Erro ao salvar alterações')
+        } catch (err: any) {
+            console.error(err)
+            setError(err.message || 'Erro ao salvar alterações')
         } finally {
             setSaving(false)
         }
