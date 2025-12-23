@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveStoredListing, getCurrentStoredUser, setCurrentStoredUser, fetchAddressFromCEP, canCreateListing, getActiveListingCount } from '@/lib/local-storage'
+import { saveStoredListing, getCurrentStoredUser, fetchAddressFromCEP, canCreateListing, getActiveListingCount } from '@/lib/local-storage'
 import { ALL_CATEGORIES, DEFAULT_CATEGORIES } from '@/lib/categories'
 
 const glassStyle = {
@@ -51,17 +51,7 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
     useEffect(() => {
         if (isOpen) {
             resetForm()
-
-            let currentUser = getCurrentStoredUser()
-            if (!currentUser) {
-                currentUser = {
-                    id: Date.now().toString(),
-                    username: 'usuario_' + Math.random().toString(36).substring(7),
-                    email: 'usuario@dezapegao.com',
-                    phone: '+5511999999999'
-                }
-                setCurrentStoredUser(currentUser)
-            }
+            const currentUser = getCurrentStoredUser()
             setUser(currentUser)
         }
     }, [isOpen])
