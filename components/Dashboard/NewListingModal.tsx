@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { saveStoredListing, getCurrentStoredUser, fetchAddressFromCEP, canCreateListing, getActiveListingCount } from '@/lib/local-storage'
 import { ALL_CATEGORIES, DEFAULT_CATEGORIES } from '@/lib/categories'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/client'
+import { logger } from '@/lib/logger'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -32,7 +35,7 @@ interface NewListingModalProps {
 
 export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
     const router = useRouter()
-    const [user, setUser] = useState<any>(null)
+    const { user, profile } = useAuth()
     const [showAllCategories, setShowAllCategories] = useState(false)
     const [formData, setFormData] = useState({
         title: '',
@@ -47,14 +50,28 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
     const [imagePreviews, setImagePreviews] = useState<string[]>([])
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [activeCount, setActiveCount] = useState(0)
+    const supabaseClient = createClient()
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && user) {
             resetForm()
-            const currentUser = getCurrentStoredUser()
-            setUser(currentUser)
+            fetchActiveCount()
         }
-    }, [isOpen])
+    }, [isOpen, user])
+
+    const fetchActiveCount = async () => {
+        if (!user) return
+        const { count, error } = await supabaseClient
+            .from('listings')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+
+        if (!error && count !== null) {
+            setActiveCount(count)
+        }
+    }
 
     const resetForm = () => {
         setFormData({
@@ -79,15 +96,25 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
         const cleanCEP = formatted.replace(/\D/g, '')
         if (cleanCEP.length === 8) {
             setLoadingCEP(true)
-            const addressData = await fetchAddressFromCEP(cleanCEP)
-            setLoadingCEP(false)
+            try {
+                const response = await fetch(`https://viacep.com.br/ws/${cleanCEP}/json/`)
+                const data = await response.json()
+                setLoadingCEP(false)
 
-            if (addressData) {
-                setLocation(addressData)
-                setError('')
-            } else {
-                setError('CEP não encontrado')
-                setLocation(null)
+                if (!data.erro) {
+                    setLocation({
+                        city: data.localidade,
+                        state: data.uf,
+                        neighborhood: data.bairro
+                    })
+                    setError('')
+                } else {
+                    setError('CEP não encontrado')
+                    setLocation(null)
+                }
+            } catch (err) {
+                setError('Erro ao buscar CEP')
+                setLoadingCEP(false)
             }
         }
     }
@@ -98,54 +125,54 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
     }
 
     const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || [])
-
-        if (images.length + files.length > 3) {
-            setError('⚠️ Máximo 3 fotos permitidas')
-            return
-        }
-
-        const validFiles: File[] = []
-
-        for (const file of files) {
-            // Check file size (2MB max for better mobile performance)
-            if (file.size > 2 * 1024 * 1024) {
-                const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
-                setError(`⚠️ Foto "${file.name}" tem ${sizeMB}MB. Máximo: 2MB`)
-                continue
+        if (e.target.files && e.target.files.length > 0) {
+            const newFiles = Array.from(e.target.files)
+            if (images.length + newFiles.length > 3) {
+                setError('Máximo de 3 fotos permitidas')
+                return
             }
 
-            // Check if it's actually an image
-            if (!file.type.startsWith('image/')) {
-                setError(`⚠️ "${file.name}" não é uma imagem válida`)
-                continue
+            const validFiles: File[] = []
+
+            for (const file of newFiles) {
+                // Check file size (2MB max for better mobile performance)
+                if (file.size > 2 * 1024 * 1024) {
+                    const sizeMB = (file.size / (1024 * 1024)).toFixed(1)
+                    setError(`⚠️ Foto "${file.name}" tem ${sizeMB}MB. Máximo: 2MB`)
+                    continue
+                }
+
+                // Check if it's actually an image
+                if (!file.type.startsWith('image/')) {
+                    setError(`⚠️ "${file.name}" não é uma imagem válida`)
+                    continue
+                }
+
+                validFiles.push(file)
             }
 
-            validFiles.push(file)
-        }
+            if (validFiles.length === 0) return
 
-        if (validFiles.length === 0) return
+            setImages([...images, ...validFiles])
 
-        const base64Promises = validFiles.map(file => {
-            return new Promise<string>((resolve) => {
-                const reader = new FileReader()
-                reader.onloadend = () => resolve(reader.result as string)
-                reader.readAsDataURL(file)
-            })
-        })
-
-        const base64Images = await Promise.all(base64Promises)
-
-        setImages([...images, ...validFiles])
-        setImagePreviews([...imagePreviews, ...base64Images])
-        if (validFiles.length === files.length) {
-            setError('')
+            // Create previews
+            const newPreviews = validFiles.map(file => URL.createObjectURL(file))
+            setImagePreviews([...imagePreviews, ...newPreviews])
+            if (validFiles.length === newFiles.length) {
+                setError('')
+            }
         }
     }
 
     const removeImage = (index: number) => {
-        setImages(images.filter((_, i) => i !== index))
-        setImagePreviews(imagePreviews.filter((_, i) => i !== index))
+        const newImages = [...images]
+        newImages.splice(index, 1)
+        setImages(newImages)
+
+        const newPreviews = [...imagePreviews]
+        URL.revokeObjectURL(newPreviews[index]) // Revoke object URL to prevent memory leaks
+        newPreviews.splice(index, 1)
+        setImagePreviews(newPreviews)
     }
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -156,8 +183,11 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
         e.preventDefault()
         setError('')
 
-        if (!user || !canCreateListing(user.id)) {
-            setError('Limite de anúncios ativos atingido!')
+        // Validations
+        const maxListings = profile?.plan === 'pro' ? 10 : profile?.plan === 'premium' ? 20 : 3
+
+        if (activeCount >= maxListings) {
+            setError(`Limite de anúncios ativos atingido! (${activeCount}/${maxListings})`)
             return
         }
 
@@ -195,31 +225,77 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
         setLoading(true)
 
         try {
-            saveStoredListing({
-                user_id: user.id,
-                title: formData.title,
-                description: formData.description,
-                price: parseFloat(formData.price),
-                category: formData.category,
-                image_urls: imagePreviews,
-                location: location,
+            if (!user) throw new Error('User not authenticated')
+
+            // 1. Create Listing Record
+            const { data: listingData, error: listingError } = await supabaseClient
+                .from('listings')
+                .insert({
+                    user_id: user.id,
+                    title: formData.title,
+                    description: formData.description,
+                    price: parseFloat(formData.price),
+                    category: formData.category,
+                    city: location.city,
+                    state: location.state,
+                    status: 'active'
+                })
+                .select()
+                .single()
+
+            if (listingError) throw listingError
+
+            // 2. Upload Images
+            const uploadPromises = images.map(async (file, index) => {
+                const fileExt = file.name.split('.').pop()
+                const fileName = `${user.id}/${listingData.id}/${index}_${Date.now()}.${fileExt}`
+
+                const { error: uploadError } = await supabaseClient.storage
+                    .from('listings')
+                    .upload(fileName, file)
+
+                if (uploadError) throw uploadError
+
+                // Get Public URL
+                const { data: { publicUrl } } = supabaseClient.storage
+                    .from('listings')
+                    .getPublicUrl(fileName)
+
+                return {
+                    listing_id: listingData.id,
+                    image_url: publicUrl,
+                    display_order: index
+                }
             })
 
+            const uploadedImages = await Promise.all(uploadPromises)
+
+            // 3. Save Images to DB
+            const { error: imagesError } = await supabaseClient
+                .from('listing_images')
+                .insert(uploadedImages)
+
+            if (imagesError) throw imagesError
+
+            // Success
             setTimeout(() => {
                 resetForm()
                 onClose()
                 router.refresh()
             }, 300)
-        } catch (err) {
-            setError('Erro ao criar anúncio')
+
+        } catch (err: any) {
+            logger.error('listing', 'create', 'Error creating listing', err)
+            setError(err.message || 'Erro ao criar anúncio')
             setLoading(false)
         }
     }
 
     if (!isOpen) return null
+    if (!profile) return null // Wait for profile
 
-    const canCreate = user ? canCreateListing(user.id) : true
-    const activeCount = user ? getActiveListingCount(user.id) : 0
+    const maxListings = profile.plan === 'pro' ? 10 : profile.plan === 'premium' ? 20 : 3
+    const canCreate = activeCount < maxListings
 
     // Categories to show
     const defaultCats = ALL_CATEGORIES.filter(c => DEFAULT_CATEGORIES.includes(c.value as any))
