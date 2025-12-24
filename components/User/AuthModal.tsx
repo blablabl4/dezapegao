@@ -55,6 +55,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
         setSuccess('')
         setLoading(true)
 
+        // Safety timeout to prevent infinite loading state
+        const safetyCleanup = setTimeout(() => {
+            if (loading) {
+                setLoading(false)
+                setError('Demorou muito para responder. Verifique sua conexão.')
+            }
+        }, 15000)
+
         try {
             // Clean phone number (keep only digits)
             const cleanPhone = formData.phone.replace(/\D/g, '')
@@ -63,12 +71,14 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
             if (cleanPhone.length < 10 || cleanPhone.length > 11) {
                 setError('Telefone inválido. Use DDD + Número (ex: 11999999999)')
                 setLoading(false)
+                clearTimeout(safetyCleanup)
                 return
             }
 
             if (!formData.password || formData.password.length < 6) {
                 setError('Senha deve ter pelo menos 6 caracteres')
                 setLoading(false)
+                clearTimeout(safetyCleanup)
                 return
             }
 
@@ -82,6 +92,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                 if (!formData.username) {
                     setError('Digite seu nome de usuário')
                     setLoading(false)
+                    clearTimeout(safetyCleanup)
                     return
                 }
 
@@ -98,6 +109,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                         setError(signUpError.message)
                     }
                     setLoading(false)
+                    clearTimeout(safetyCleanup)
                     return
                 }
 
@@ -105,16 +117,24 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                 onClose()
                 router.refresh()
             } else {
-                // Login
-                const { error: signInError } = await signIn(emailAuth, formData.password)
+                // Login with race condition for timeout
+                const loginPromise = signIn(emailAuth, formData.password)
+                const timeoutPromise = new Promise<{ error: Error | null }>((resolve) =>
+                    setTimeout(() => resolve({ error: new Error('Tempo limite excedido') }), 10000)
+                )
+
+                const { error: signInError } = await Promise.race([loginPromise, timeoutPromise])
 
                 if (signInError) {
                     if (signInError.message.includes('Invalid login')) {
                         setError('Telefone ou senha incorretos')
+                    } else if (signInError.message.includes('Tempo limite')) {
+                        setError('O servidor demorou para responder. Tente novamente.')
                     } else {
                         setError(signInError.message)
                     }
                     setLoading(false)
+                    clearTimeout(safetyCleanup)
                     return
                 }
 
@@ -125,6 +145,7 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
         } catch (err) {
             setError('Erro inesperado. Tente novamente.')
         } finally {
+            clearTimeout(safetyCleanup)
             setLoading(false)
         }
     }

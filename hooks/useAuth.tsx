@@ -52,18 +52,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Fetch profile data
     const fetchProfile = async (userId: string) => {
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .single()
+        try {
+            // Add a timeout to the fetch operation
+            const fetchPromise = supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single()
 
-        if (error) {
-            logger.error('auth', 'fetchProfile', 'Error fetching profile', error, { userId })
-            return null
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+            )
+
+            const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
+
+            if (error) {
+                // If checking specifically for existence, we want to know if it's a 404 or other error
+                if (error.code === 'PGRST116') { // Error code for "result contains 0 rows"
+                    logger.warn('auth', 'fetchProfile', 'Profile not found', { userId })
+                    return { data: null, error: 'not_found' }
+                }
+                logger.error('auth', 'fetchProfile', 'Error fetching profile', error, { userId })
+                return { data: null, error: error.message }
+            }
+            logger.debug('auth', 'fetchProfile', 'Profile fetched successfully', { userId })
+            return { data: data as Profile, error: null }
+        } catch (err) {
+            logger.error('auth', 'fetchProfile', 'Unexpected error fetching profile', err)
+            return { data: null, error: 'timeout_or_error' }
         }
-        logger.debug('auth', 'fetchProfile', 'Profile fetched successfully', { userId })
-        return data as Profile
     }
 
     // Initialize auth state
@@ -99,9 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         logger.info('auth', 'initAuth', 'Session found', { userId: currentSession.user.id })
 
                         // Load profile - MUST await this to prevent ghost sessions
-                        const profileData = await fetchProfile(currentSession.user.id)
+                        const { data: profileData, error: profileError } = await fetchProfile(currentSession.user.id)
 
-                        if (!profileData) {
+                        // Only force logout if profile is EXPLICITLY confirmed missing (deleted user)
+                        // If it's a network error or other issue, keep the session to prevent logout loops
+                        if (!profileData && profileError === 'not_found') {
                             logger.warn('auth', 'initAuth', 'User exists but profile missing - forcing logout', { userId: currentSession.user.id })
                             await supabase.auth.signOut()
                             if (mounted) {
@@ -113,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             if (mounted) {
                                 setSession(currentSession)
                                 setUser(currentSession.user)
-                                setProfile(profileData)
+                                setProfile(profileData) // Might be null if error, but user stays logged in
                             }
                         }
                     } else {
@@ -141,9 +160,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (event, newSession) => {
                 if (newSession?.user) {
-                    const profileData = await fetchProfile(newSession.user.id)
+                    const { data: profileData, error: profileError } = await fetchProfile(newSession.user.id)
 
-                    if (!profileData) {
+                    if (!profileData && profileError === 'not_found') {
                         logger.warn('auth', 'onStateChange', 'User exists but profile missing - forcing logout', { userId: newSession.user.id })
                         await supabase.auth.signOut()
                         setSession(null)
@@ -285,7 +304,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (error) throw error
 
             // Refresh profile data
-            const updatedProfile = await fetchProfile(user.id)
+            const { data: updatedProfile } = await fetchProfile(user.id)
             setProfile(updatedProfile)
 
             return { error: null }
@@ -297,7 +316,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Refresh profile
     const refreshProfile = async () => {
         if (user) {
-            const profileData = await fetchProfile(user.id)
+            const { data: profileData } = await fetchProfile(user.id)
             setProfile(profileData)
         }
     }
