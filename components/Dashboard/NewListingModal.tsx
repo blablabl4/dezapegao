@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ALL_CATEGORIES, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { useAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase/client'
 import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
@@ -285,7 +284,7 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
             }, 300)
 
         } catch (err: any) {
-            logger.error('listing', 'create', 'Error creating listing', err)
+            logger.error('listings', 'create', 'Error creating listing', err)
             setError(err.message || 'Erro ao criar anúncio')
             setLoading(false)
         }
