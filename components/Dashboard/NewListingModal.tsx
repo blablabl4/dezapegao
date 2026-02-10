@@ -235,8 +235,10 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
                     description: formData.description,
                     price: parseFloat(formData.price),
                     category: formData.category,
+                    cep: formData.cep.replace(/\D/g, ''),
                     city: location.city,
                     state: location.state,
+                    neighborhood: location.neighborhood,
                     status: 'active'
                 })
                 .select()
@@ -263,7 +265,7 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
                 return {
                     listing_id: listingData.id,
                     image_url: publicUrl,
-                    display_order: index
+                    position: index
                 }
             })
 
@@ -451,7 +453,7 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
                                 {loadingCEP && <p className="text-xs text-white/60 mt-1">Buscando...</p>}
                                 {location && (
                                     <p className="text-xs text-green-400 mt-1">
-                                        📍 {location.bairro}, {location.cidade}/{location.estado}
+                                        📍 {location.neighborhood}, {location.city}/{location.state}
                                     </p>
                                 )}
                             </div>

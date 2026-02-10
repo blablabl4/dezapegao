@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
+import { useAuth } from '@/hooks/useAuth'
 import { signUpSchema, type SignUpInput } from '@/lib/validation'
 import { DEMO_MODE } from '@/lib/mock-data'
 import { setCurrentStoredUser } from '@/lib/local-storage'
@@ -23,6 +23,7 @@ const genderOptions = [
 
 export default function SignUpPage() {
     const router = useRouter()
+    const { signUp } = useAuth()
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -68,19 +69,16 @@ export default function SignUpPage() {
             }
             signUpSchema.parse(data)
 
-            const supabase = createClient()
-            const { error: signUpError } = await supabase.auth.signUp({
-                email: formData.email,
-                password: formData.password,
-                options: {
-                    data: {
-                        username: formData.username,
-                        phone: formData.phone,
-                        gender: formData.gender,
-                        birthdate: formData.birthdate,
-                    },
-                },
-            })
+            // Usa useAuth.signUp que cria TANTO o auth user QUANTO o profile no DB
+            const { error: signUpError } = await signUp(
+                formData.email,
+                formData.password,
+                {
+                    username: formData.username,
+                    phone: formData.phone,
+                    gender: formData.gender || undefined,
+                }
+            )
 
             if (signUpError) {
                 setError(signUpError.message)
@@ -186,8 +184,8 @@ export default function SignUpPage() {
                                         type="button"
                                         onClick={() => setFormData({ ...formData, gender: opt.value })}
                                         className={`px-2 py-2 rounded-xl text-xs transition ${formData.gender === opt.value
-                                                ? 'bg-purple-500/50 border-purple-400 text-white'
-                                                : 'bg-white/10 border-white/20 text-white/70 hover:bg-white/20'
+                                            ? 'bg-purple-500/50 border-purple-400 text-white'
+                                            : 'bg-white/10 border-white/20 text-white/70 hover:bg-white/20'
                                             } border`}
                                     >
                                         {opt.label}

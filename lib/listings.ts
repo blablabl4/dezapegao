@@ -313,19 +313,6 @@ export async function trackEvent(
             listing_id: listingId,
             user_id: userId || null,
         })
-
-    // Also increment counter on listing
-    if (eventType === 'view') {
-        await supabase.rpc('increment_counter', {
-            listing_id: listingId,
-            column_name: 'views_count'
-        })
-    } else if (eventType === 'whatsapp_click') {
-        await supabase.rpc('increment_counter', {
-            listing_id: listingId,
-            column_name: 'whatsapp_clicks'
-        })
-    }
 }
 
 // Renew listing (reset expiration)

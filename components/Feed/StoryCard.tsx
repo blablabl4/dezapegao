@@ -55,7 +55,7 @@ export function StoryCard({ listing, userId }: StoryCardProps) {
             {/* Image */}
             <div className="relative aspect-[4/5] max-h-[600px] bg-gray-100">
                 <Image
-                    src={listing.image_url}
+                    src={listing.image_url || ''}
                     alt={listing.title}
                     fill
                     className="object-cover"

@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { useState, useRef } from 'react'
 import { formatPrice, timeAgo } from '@/lib/utils'
+import { getCategoryIcon } from '@/lib/categories'
 import { LikeButton } from './LikeButton'
 import type { ListingWithProfile } from '@/types/database'
 
@@ -12,16 +13,6 @@ interface ReelsFeedProps {
     onRequireAuth?: (action: string) => void
 }
 
-const categoryIcons: Record<string, string> = {
-    roupas: '👕',
-    eletronicos: '📱',
-    moveis: '🛋️',
-    eletrodomesticos: '🔌',
-    brinquedos: '🧸',
-    esportes: '⚽',
-    veiculos: '🚗',
-    outros: '📦',
-}
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -152,7 +143,7 @@ export function ReelsFeed({ listings, userId, onRequireAuth }: ReelsFeedProps) {
                         <div className="mb-6">
                             <p className="text-white/50 text-xs uppercase tracking-wide mb-1">Localização</p>
                             <p className="text-white font-medium text-lg">
-                                📍 {currentListing.location?.bairro || 'Não informado'}, {currentListing.location?.cidade || 'SP'}/{currentListing.location?.estado || 'SP'}
+                                📍 {currentListing.neighborhood || 'Não informado'}, {currentListing.city || 'SP'}/{currentListing.state || 'SP'}
                             </p>
                         </div>
 
@@ -181,13 +172,13 @@ export function ReelsFeed({ listings, userId, onRequireAuth }: ReelsFeedProps) {
                 {listings.map((listing, index) => (
                     <div key={listing.id} className="h-full w-full snap-start relative bg-black">
                         <div className="absolute inset-0">
-                            <Image src={listing.image_url} alt={listing.title} fill className="object-cover" priority={index < 2} sizes="100vw" />
+                            <Image src={listing.image_url || ''} alt={listing.title} fill className="object-cover" priority={index < 2} sizes="100vw" />
                         </div>
 
                         <div className="absolute inset-0 z-10 pointer-events-none">
                             <div className="absolute top-4 left-4 pointer-events-auto">
                                 <div className="flex items-center space-x-2 text-white drop-shadow-lg">
-                                    <span className="text-sm">{categoryIcons[listing.category]}</span>
+                                    <span className="text-sm">{getCategoryIcon(listing.category)}</span>
                                     <span className="text-sm capitalize font-medium">{listing.category}</span>
                                     <span className="text-white/60">•</span>
                                     <span className="text-white/80 text-sm">{timeAgo(listing.created_at)}</span>

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
     try {
-        const { listingId, action } = await request.json()
+        const { listingId, action, userId } = await request.json()
 
         if (!listingId || !action) {
             return NextResponse.json(
@@ -14,33 +14,21 @@ export async function POST(request: Request) {
 
         const supabase = await createClient()
 
-        // Track WhatsApp clicks
-        if (action === 'whatsapp_click') {
-            // Get current listing
-            const { data: listing } = await supabase
-                .from('listings')
-                .select('whatsapp_clicks')
-                .eq('id', listingId)
-                .single()
+        // Salva o evento na tabela analytics_events (sem race condition)
+        // Os contadores podem ser derivados via COUNT() queries quando necessário
+        const { error } = await supabase
+            .from('analytics_events')
+            .insert({
+                event_type: action,
+                listing_id: listingId,
+                user_id: userId || null,
+            })
 
-            if (!listing) {
-                return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
-            }
-
-            // Increment
-            const { error } = await supabase
-                .from('listings')
-                .update({ whatsapp_clicks: listing.whatsapp_clicks + 1 })
-                .eq('id', listingId)
-
-            if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 })
-            }
-
-            return NextResponse.json({ success: true })
+        if (error) {
+            return NextResponse.json({ error: error.message }, { status: 500 })
         }
 
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+        return NextResponse.json({ success: true })
     } catch (error: any) {
         return NextResponse.json(
             { error: error.message || 'Internal server error' },

@@ -1,16 +1,9 @@
 import { z } from 'zod'
+import { ALL_CATEGORIES } from '@/lib/categories'
 
-// Category schema
-export const categorySchema = z.enum([
-    'roupas',
-    'eletronicos',
-    'moveis',
-    'eletrodomesticos',
-    'brinquedos',
-    'esportes',
-    'veiculos',
-    'outros',
-])
+// Category schema — derivado de categories.ts para manter sincronizado
+const categoryValues = ALL_CATEGORIES.map(c => c.value) as [string, ...string[]]
+export const categorySchema = z.enum(categoryValues)
 
 // Listing creation schema
 export const createListingSchema = z.object({
