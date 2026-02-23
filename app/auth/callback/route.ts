@@ -10,6 +10,6 @@ export async function GET(request: Request) {
         await supabase.auth.exchangeCodeForSession(code)
     }
 
-    // Redirect to home after email confirmation
-    return NextResponse.redirect(new URL('/', requestUrl.origin))
+    // Redirect to home after email confirmation (relative to basePath)
+    return NextResponse.redirect(new URL('/vendas', requestUrl.origin))
 }
