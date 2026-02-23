@@ -158,17 +158,25 @@ export default function HomePage() {
             </span>
           </Link>
 
-          <button
-            onClick={openNewListing}
-            className="w-10 h-10 rounded-full hover:bg-white/10 transition"
-            style={glassStyle}
-          >
-            <div className="w-full h-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/explorar"
+              className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-full text-white text-xs font-medium transition"
+            >
+              Explorar
+            </Link>
+            <button
+              onClick={openNewListing}
+              className="w-10 h-10 rounded-full hover:bg-white/10 transition"
+              style={glassStyle}
+            >
+              <div className="w-full h-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+            </button>
+          </div>
         </div>
       </header>
 
