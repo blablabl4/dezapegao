@@ -1,0 +1,246 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth Models
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?   // For Credentials provider (Phone-based auth)
+  accounts      Account[]
+  sessions      Session[]
+  profile       Profile?
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Dezapegão Application Models
+
+enum UserPlan {
+  free
+  basic
+  pro
+  premium
+}
+
+enum UserStatus {
+  active
+  suspended
+  banned
+}
+
+enum ListingStatus {
+  active
+  sold
+  expired
+  removed
+}
+
+enum GenderType {
+  male
+  female
+  other
+  prefer_not_say
+}
+
+enum ReportStatus {
+  pending
+  reviewed
+  resolved
+  dismissed
+}
+
+model Profile {
+  id                String       @id @default(uuid())
+  userId            String       @unique
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username          String       @unique
+  email             String       @unique
+  phone             String
+  avatarUrl         String?
+  gender            GenderType?
+  birthdate         DateTime?
+  city              String?
+  state             String?      @db.VarChar(2)
+  plan              UserPlan     @default(free)
+  status            UserStatus   @default(active)
+  usernameChangedAt DateTime?
+  emailVerifiedAt   DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  listings            Listing[]
+  likes               Like[]
+  analyticsEvents     AnalyticsEvent[]
+  reportsAsReporter   Report[]           @relation("Reporter")
+  reportsAsReported   Report[]           @relation("ReportedUser")
+  reportsAsReviewer   Report[]           @relation("Reviewer")
+  subscriptions       Subscription[]
+  onboardingResponses OnboardingResponse[]
+
+  @@index([username])
+  @@index([city])
+  @@index([plan])
+  @@index([status])
+}
+
+model Listing {
+  id             String        @id @default(uuid())
+  userId         String
+  profile        Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String        @db.VarChar(80)
+  description    String?       @db.Text
+  price          Decimal       @db.Decimal(10, 2)
+  category       String        @db.VarChar(50)
+  cep            String        @db.VarChar(9)
+  city           String        @db.VarChar(100)
+  state          String        @db.VarChar(2)
+  neighborhood   String?       @db.VarChar(100)
+  status         ListingStatus @default(active)
+  viewsCount     Int           @default(0)
+  likesCount     Int           @default(0)
+  whatsappClicks Int           @default(0)
+  expiresAt      DateTime
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  images          ListingImage[]
+  likes           Like[]
+  analyticsEvents AnalyticsEvent[]
+  reports         Report[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([city])
+  @@index([category])
+  @@index([expiresAt])
+  @@index([createdAt(sort: Desc)])
+}
+
+model ListingImage {
+  id           String   @id @default(uuid())
+  listingId    String
+  listing      Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  imageUrl     String   @db.Text
+  thumbnailUrl String?  @db.Text
+  position     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([listingId])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([listingId])
+  @@index([userId])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(uuid())
+  eventType String   @db.VarChar(50)
+  listingId String?
+  listing   Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  userId    String?
+  profile   Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([listingId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  reporterId     String?
+  reporter       Profile?     @relation("Reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  listingId      String?
+  listing        Listing?     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reportedUserId String?
+  reportedUser   Profile?     @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  reason         String       @db.VarChar(50)
+  description    String?      @db.Text
+  status         ReportStatus @default(pending)
+  reviewedById   String?
+  reviewer       Profile?     @relation("Reviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([status])
+  @@index([listingId])
+}
+
+model Subscription {
+  id                  String   @id @default(uuid())
+  userId              String
+  profile             Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                UserPlan
+  paymentProvider     String?  @db.VarChar(50)
+  externalId          String?  @db.VarChar(255)
+  status              String?  @default("active") @db.VarChar(20)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OnboardingResponse {
+  id        String   @id @default(uuid())
+  userId    String
+  profile   Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  question  String   @db.VarChar(100)
+  answer    String   @db.VarChar(100)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, question])

@@ -22,6 +22,8 @@ export const metadata: Metadata = {
   keywords: 'desapego, marketplace, heliópolis, são paulo, compra, venda',
 }
 
+import { NextAuthProvider } from '@/components/Providers/NextAuthProvider'
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -30,9 +32,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={inter.variable}>
       <body className="antialiased font-sans overflow-hidden touch-manipulation">
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <NextAuthProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </NextAuthProvider>
       </body>
     </html>
   )
