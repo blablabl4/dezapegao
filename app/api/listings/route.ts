@@ -10,6 +10,9 @@ export async function GET(request: Request) {
         const category = searchParams.get('category')
         const userId = searchParams.get('userId')
 
+        console.log('--- API Debug: Fetching Listings ---')
+        console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+
         const supabase = await createClient()
         let query = supabase
             .from('listings')
