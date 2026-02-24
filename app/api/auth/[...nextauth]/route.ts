@@ -46,9 +46,32 @@ export const authOptions: NextAuthOptions = {
         signIn: "/login",
     },
     callbacks: {
+        async jwt({ token, user, trigger, session }) {
+            if (user) {
+                token.id = user.id
+            }
+
+            // Fetch profile data to include in token/session
+            const profile = await prisma.profile.findFirst({
+                where: { userId: token.id as string }
+            })
+
+            if (profile) {
+                token.username = profile.username
+                token.phone = profile.phone
+                token.avatarUrl = profile.avatarUrl
+                token.plan = profile.plan
+            }
+
+            return token
+        },
         async session({ session, token }) {
             if (token && session.user) {
-                (session.user as any).id = token.sub
+                (session.user as any).id = token.id;
+                (session.user as any).username = token.username;
+                (session.user as any).phone = token.phone;
+                (session.user as any).avatarUrl = token.avatarUrl;
+                (session.user as any).plan = token.plan;
             }
             return session
         }

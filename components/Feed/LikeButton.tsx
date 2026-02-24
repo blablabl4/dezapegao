@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { DEMO_MODE } from '@/lib/mock-data'
 
 interface LikeButtonProps {
     listingId: string
@@ -12,7 +10,6 @@ interface LikeButtonProps {
     variant?: 'default' | 'reels'
 }
 
-// Glass style for consistency
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
     backdropFilter: 'blur(16px)',
@@ -27,20 +24,16 @@ export function LikeButton({ listingId, initialLikes, userId, variant = 'default
     const [loading, setLoading] = useState(false)
 
     useEffect(() => {
-        if (!userId || DEMO_MODE) return
-
+        if (!userId) return
         const checkIfLiked = async () => {
-            const supabase = createClient()
-            const { data } = await supabase
-                .from('likes')
-                .select('id')
-                .eq('listing_id', listingId)
-                .eq('user_id', userId)
-                .single()
-
-            setIsLiked(!!data)
+            try {
+                const res = await fetch(`/api/likes?listingId=${listingId}&userId=${userId}`)
+                const { liked } = await res.json()
+                setIsLiked(liked)
+            } catch (err) {
+                console.error('Error checking like status:', err)
+            }
         }
-
         checkIfLiked()
     }, [listingId, userId])
 
@@ -51,36 +44,26 @@ export function LikeButton({ listingId, initialLikes, userId, variant = 'default
         if (loading) return
 
         if (!userId) {
-            if (DEMO_MODE) {
-                setIsLiked(prev => !prev)
-                setLikes(prev => isLiked ? prev - 1 : prev + 1)
-                return
-            }
             router.push('/signup')
             return
         }
 
-        if (DEMO_MODE) {
-            setIsLiked(prev => !prev)
-            setLikes(prev => isLiked ? prev - 1 : prev + 1)
-            return
-        }
-
         setLoading(true)
-        const supabase = createClient()
 
         const doLike = async () => {
             try {
-                if (isLiked) {
-                    const { error } = await supabase.from('likes').delete().eq('listing_id', listingId).eq('user_id', userId)
-                    if (!error) {
-                        setLikes((prev) => prev - 1)
+                const res = await fetch('/api/likes', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ listingId, action: isLiked ? 'unlike' : 'like' })
+                })
+
+                if (res.ok) {
+                    if (isLiked) {
+                        setLikes(prev => prev - 1)
                         setIsLiked(false)
-                    }
-                } else {
-                    const { error } = await supabase.from('likes').insert({ listing_id: listingId, user_id: userId })
-                    if (!error) {
-                        setLikes((prev) => prev + 1)
+                    } else {
+                        setLikes(prev => prev + 1)
                         setIsLiked(true)
                     }
                 }
@@ -94,19 +77,17 @@ export function LikeButton({ listingId, initialLikes, userId, variant = 'default
         doLike()
     }, [isLiked, likes, listingId, loading, router, userId])
 
-    // Reels variant - Glass style
     if (variant === 'reels') {
         return (
             <button
                 onClick={handleLike}
                 onTouchEnd={handleLike}
-                disabled={loading && !DEMO_MODE}
+                disabled={loading}
                 className="flex flex-col items-center touch-manipulation"
                 type="button"
             >
                 <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center transition active:scale-95 ${isLiked ? 'bg-pink-500/80' : 'hover:bg-white/20'
-                        }`}
+                    className={`w-12 h-12 rounded-full flex items-center justify-center transition active:scale-95 ${isLiked ? 'bg-pink-500/80' : 'hover:bg-white/20'}`}
                     style={isLiked ? {
                         background: 'rgba(236, 72, 153, 0.8)',
                         backdropFilter: 'blur(16px)',
@@ -132,15 +113,13 @@ export function LikeButton({ listingId, initialLikes, userId, variant = 'default
         )
     }
 
-    // Default variant
     return (
         <button
             onClick={handleLike}
             onTouchEnd={handleLike}
-            disabled={loading && !DEMO_MODE}
+            disabled={loading}
             type="button"
-            className={`flex items-center space-x-2 px-4 py-3 rounded-xl font-semibold transition touch-manipulation ${isLiked ? 'bg-pink-100 text-pink-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+            className={`flex items-center space-x-2 px-4 py-3 rounded-xl font-semibold transition touch-manipulation ${isLiked ? 'bg-pink-100 text-pink-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
         >
             <svg className={`w-6 h-6 ${isLiked ? 'fill-pink-600' : 'fill-none'}`} stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />

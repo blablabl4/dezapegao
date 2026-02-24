@@ -1,4 +1,5 @@
-import { createClient } from '@/lib/supabase/client'
+import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 
 export interface Listing {
     id: string
@@ -47,6 +48,42 @@ export interface CreateListingData {
     image_urls: string[]
 }
 
+// Function to map Prisma Listing to App Listing
+function mapPrismaToListing(p: any): Listing {
+    return {
+        id: p.id,
+        user_id: p.userId,
+        title: p.title,
+        description: p.description,
+        price: Number(p.price),
+        category: p.category,
+        cep: p.cep,
+        city: p.city,
+        state: p.state,
+        neighborhood: p.neighborhood,
+        status: p.status,
+        views_count: p.viewsCount,
+        likes_count: p.likesCount,
+        whatsapp_clicks: p.whatsappClicks,
+        expires_at: p.expiresAt.toISOString(),
+        created_at: p.createdAt.toISOString(),
+        updated_at: p.updatedAt.toISOString(),
+        images: p.images?.map((img: any) => ({
+            id: img.id,
+            listing_id: img.listingId,
+            image_url: img.imageUrl,
+            thumbnail_url: img.thumbnailUrl,
+            position: img.position
+        })),
+        profile: p.profile ? {
+            id: p.profile.id,
+            username: p.profile.username,
+            avatar_url: p.profile.avatarUrl,
+            phone: p.profile.phone
+        } : undefined
+    }
+}
+
 // Get active listings for feed
 export async function getActiveListings(options?: {
     city?: string
@@ -54,82 +91,81 @@ export async function getActiveListings(options?: {
     limit?: number
     offset?: number
 }): Promise<Listing[]> {
-    const supabase = createClient()
+    try {
+        const listings = await prisma.listing.findMany({
+            where: {
+                status: 'active',
+                city: options?.city || undefined,
+                category: options?.category || undefined,
+            },
+            include: {
+                images: {
+                    orderBy: { position: 'asc' }
+                },
+                profile: {
+                    select: {
+                        id: true,
+                        username: true,
+                        avatarUrl: true,
+                        phone: true
+                    }
+                }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: options?.limit || 50,
+            skip: options?.offset || 0,
+        })
 
-    let query = supabase
-        .from('listings')
-        .select(`
-      *,
-      images:listing_images(*),
-      profile:profiles(id, username, avatar_url, phone)
-    `)
-        .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(options?.limit || 50)
-
-    if (options?.city) {
-        query = query.eq('city', options.city)
-    }
-
-    if (options?.category) {
-        query = query.eq('category', options.category)
-    }
-
-    if (options?.offset) {
-        query = query.range(options.offset, options.offset + (options.limit || 50) - 1)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
+        return listings.map(mapPrismaToListing)
+    } catch (error) {
         console.error('Error fetching listings:', error)
         return []
     }
-
-    return data as Listing[]
 }
 
 // Get user's listings (all statuses)
 export async function getUserListings(userId: string): Promise<Listing[]> {
-    const supabase = createClient()
-
-    const { data, error } = await supabase
-        .from('listings')
-        .select(`
-      *,
-      images:listing_images(*)
-    `)
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-
-    if (error) {
+    try {
+        const listings = await prisma.listing.findMany({
+            where: { userId },
+            include: {
+                images: {
+                    orderBy: { position: 'asc' }
+                }
+            },
+            orderBy: { createdAt: 'desc' }
+        })
+        return listings.map(mapPrismaToListing)
+    } catch (error) {
         console.error('Error fetching user listings:', error)
         return []
     }
-
-    return data as Listing[]
 }
 
 // Get single listing by ID
 export async function getListingById(id: string): Promise<Listing | null> {
-    const supabase = createClient()
-
-    const { data, error } = await supabase
-        .from('listings')
-        .select(`
-      *,
-      images:listing_images(*),
-      profile:profiles(id, username, avatar_url, phone)
-    `)
-        .eq('id', id)
-        .single()
-
-    if (error) {
+    try {
+        const listing = await prisma.listing.findUnique({
+            where: { id },
+            include: {
+                images: {
+                    orderBy: { position: 'asc' }
+                },
+                profile: {
+                    select: {
+                        id: true,
+                        username: true,
+                        avatarUrl: true,
+                        phone: true
+                    }
+                }
+            }
+        })
+        return listing ? mapPrismaToListing(listing) : null
+    } catch (error) {
         console.error('Error fetching listing:', error)
         return null
     }
-
-    return data as Listing
 }
 
 // Create new listing
@@ -137,52 +173,38 @@ export async function createListing(
     userId: string,
     data: CreateListingData
 ): Promise<{ listing: Listing | null; error: Error | null }> {
-    const supabase = createClient()
-
     // Calculate expiration (24h for free plan)
     const expiresAt = new Date()
     expiresAt.setHours(expiresAt.getHours() + 24)
 
     try {
-        // Create listing
-        const { data: listing, error: listingError } = await supabase
-            .from('listings')
-            .insert({
-                user_id: userId,
+        const listing = await prisma.listing.create({
+            data: {
+                userId,
                 title: data.title,
                 description: data.description || null,
-                price: data.price,
+                price: new Prisma.Decimal(data.price),
                 category: data.category,
                 cep: data.cep,
                 city: data.city,
                 state: data.state,
                 neighborhood: data.neighborhood || null,
-                expires_at: expiresAt.toISOString(),
-            })
-            .select()
-            .single()
-
-        if (listingError) throw listingError
-
-        // Create images
-        if (data.image_urls.length > 0) {
-            const imageRecords = data.image_urls.map((url, index) => ({
-                listing_id: listing.id,
-                image_url: url,
-                position: index,
-            }))
-
-            const { error: imagesError } = await supabase
-                .from('listing_images')
-                .insert(imageRecords)
-
-            if (imagesError) {
-                console.error('Error creating images:', imagesError)
+                expiresAt,
+                images: {
+                    create: data.image_urls.map((url, index) => ({
+                        imageUrl: url,
+                        position: index
+                    }))
+                }
+            },
+            include: {
+                images: true
             }
-        }
+        })
 
-        return { listing: listing as Listing, error: null }
+        return { listing: mapPrismaToListing(listing), error: null }
     } catch (error) {
+        console.error('Error creating listing:', error)
         return { listing: null, error: error as Error }
     }
 }
@@ -193,57 +215,50 @@ export async function updateListing(
     userId: string,
     data: Partial<CreateListingData>
 ): Promise<{ error: Error | null }> {
-    const supabase = createClient()
-
     try {
-        const updateData: any = {}
-        if (data.title) updateData.title = data.title
-        if (data.description !== undefined) updateData.description = data.description
-        if (data.price) updateData.price = data.price
-        if (data.category) updateData.category = data.category
-        if (data.cep) updateData.cep = data.cep
-        if (data.city) updateData.city = data.city
-        if (data.state) updateData.state = data.state
-        if (data.neighborhood !== undefined) updateData.neighborhood = data.neighborhood
-
-        const { error } = await supabase
-            .from('listings')
-            .update(updateData)
-            .eq('id', id)
-            .eq('user_id', userId)
-
-        if (error) throw error
-
+        await prisma.listing.update({
+            where: { id, userId },
+            data: {
+                title: data.title,
+                description: data.description,
+                price: data.price ? new Prisma.Decimal(data.price) : undefined,
+                category: data.category,
+                cep: data.cep,
+                city: data.city,
+                state: data.state,
+                neighborhood: data.neighborhood,
+            }
+        })
         return { error: null }
     } catch (error) {
+        console.error('Error updating listing:', error)
         return { error: error as Error }
     }
 }
 
 // Mark as sold
 export async function markAsSold(id: string, userId: string): Promise<{ error: Error | null }> {
-    const supabase = createClient()
-
-    const { error } = await supabase
-        .from('listings')
-        .update({ status: 'sold' })
-        .eq('id', id)
-        .eq('user_id', userId)
-
-    return { error: error as Error | null }
+    try {
+        await prisma.listing.update({
+            where: { id, userId },
+            data: { status: 'sold' }
+        })
+        return { error: null }
+    } catch (error) {
+        return { error: error as Error }
+    }
 }
 
 // Delete listing
 export async function deleteListing(id: string, userId: string): Promise<{ error: Error | null }> {
-    const supabase = createClient()
-
-    const { error } = await supabase
-        .from('listings')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', userId)
-
-    return { error: error as Error | null }
+    try {
+        await prisma.listing.delete({
+            where: { id, userId }
+        })
+        return { error: null }
+    } catch (error) {
+        return { error: error as Error }
+    }
 }
 
 // Toggle like
@@ -251,32 +266,28 @@ export async function toggleLike(
     listingId: string,
     userId: string
 ): Promise<{ liked: boolean; error: Error | null }> {
-    const supabase = createClient()
-
-    // Check if already liked
-    const { data: existingLike } = await supabase
-        .from('likes')
-        .select('id')
-        .eq('listing_id', listingId)
-        .eq('user_id', userId)
-        .single()
-
     try {
-        if (existingLike) {
-            // Remove like
-            await supabase
-                .from('likes')
-                .delete()
-                .eq('listing_id', listingId)
-                .eq('user_id', userId)
+        const existingLike = await prisma.like.findUnique({
+            where: {
+                userId_listingId: {
+                    userId,
+                    listingId
+                }
+            }
+        })
 
+        if (existingLike) {
+            await prisma.like.delete({
+                where: { id: existingLike.id }
+            })
             return { liked: false, error: null }
         } else {
-            // Add like
-            await supabase
-                .from('likes')
-                .insert({ listing_id: listingId, user_id: userId })
-
+            await prisma.like.create({
+                data: {
+                    userId,
+                    listingId
+                }
+            })
             return { liked: true, error: null }
         }
     } catch (error) {
@@ -286,16 +297,19 @@ export async function toggleLike(
 
 // Check if user liked a listing
 export async function isLiked(listingId: string, userId: string): Promise<boolean> {
-    const supabase = createClient()
-
-    const { data } = await supabase
-        .from('likes')
-        .select('id')
-        .eq('listing_id', listingId)
-        .eq('user_id', userId)
-        .single()
-
-    return !!data
+    try {
+        const like = await prisma.like.findUnique({
+            where: {
+                userId_listingId: {
+                    userId,
+                    listingId
+                }
+            }
+        })
+        return !!like
+    } catch (error) {
+        return false
+    }
 }
 
 // Track analytics event
@@ -304,32 +318,47 @@ export async function trackEvent(
     listingId: string,
     userId?: string
 ): Promise<void> {
-    const supabase = createClient()
-
-    await supabase
-        .from('analytics_events')
-        .insert({
-            event_type: eventType,
-            listing_id: listingId,
-            user_id: userId || null,
+    try {
+        await prisma.analyticsEvent.create({
+            data: {
+                eventType,
+                listingId,
+                userId: userId || null
+            }
         })
+
+        // Also update counters if necessary (views, whatsapp clicks)
+        if (eventType === 'view') {
+            await prisma.listing.update({
+                where: { id: listingId },
+                data: { viewsCount: { increment: 1 } }
+            })
+        } else if (eventType === 'whatsapp_click') {
+            await prisma.listing.update({
+                where: { id: listingId },
+                data: { whatsappClicks: { increment: 1 } }
+            })
+        }
+    } catch (error) {
+        console.error('Error tracking event:', error)
+    }
 }
 
 // Renew listing (reset expiration)
 export async function renewListing(id: string, userId: string): Promise<{ error: Error | null }> {
-    const supabase = createClient()
-
     const expiresAt = new Date()
     expiresAt.setHours(expiresAt.getHours() + 24)
 
-    const { error } = await supabase
-        .from('listings')
-        .update({
-            status: 'active',
-            expires_at: expiresAt.toISOString()
+    try {
+        await prisma.listing.update({
+            where: { id, userId },
+            data: {
+                status: 'active',
+                expiresAt: expiresAt
+            }
         })
-        .eq('id', id)
-        .eq('user_id', userId)
-
-    return { error: error as Error | null }
+        return { error: null }
+    } catch (error) {
+        return { error: error as Error }
+    }
 }

@@ -1,144 +1,64 @@
-'use client'
+// Storage utilities for Cloudflare R2 uploads
+// All uploads are now handled via the /api/upload route (server-side)
+// This file provides client-side helper functions for upload operations
 
-import { createClient } from '@/lib/supabase/client'
-import { useState } from 'react'
-
-interface UploadResult {
-    url: string | null
-    error: Error | null
-}
-
-// Upload avatar for user
-export async function uploadAvatar(file: File, userId: string): Promise<UploadResult> {
-    const supabase = createClient()
-
-    // Generate unique filename
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${userId}/avatar.${fileExt}`
-
+/**
+ * Upload a file to R2 via the API endpoint
+ */
+export async function uploadFile(file: File): Promise<{ url: string; error?: any }> {
     try {
-        // Delete old avatar if exists
-        await supabase.storage
-            .from('avatars')
-            .remove([fileName])
+        const formData = new FormData()
+        formData.append('file', file)
 
-        // Upload new avatar
-        const { error: uploadError } = await supabase.storage
-            .from('avatars')
-            .upload(fileName, file, {
-                cacheControl: '3600',
-                upsert: true,
-            })
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+        })
 
-        if (uploadError) throw uploadError
+        if (!res.ok) {
+            const data = await res.json()
+            return { url: '', error: { message: data.error || 'Upload failed' } }
+        }
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(fileName)
-
-        return { url: publicUrl, error: null }
-    } catch (error) {
-        return { url: null, error: error as Error }
+        const { url } = await res.json()
+        return { url }
+    } catch (error: any) {
+        return { url: '', error: { message: error.message || 'Upload failed' } }
     }
 }
 
-// Upload listing image
+/**
+ * Upload a listing image with progress simulation
+ */
 export async function uploadListingImage(
     file: File,
-    userId: string,
-    listingId: string,
-    position: number
-): Promise<UploadResult> {
-    const supabase = createClient()
-
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${userId}/${listingId}/${position}.${fileExt}`
-
+    onProgress?: (progress: number) => void
+): Promise<{ url: string; error?: any }> {
     try {
-        const { error: uploadError } = await supabase.storage
-            .from('listings')
-            .upload(fileName, file, {
-                cacheControl: '3600',
-                upsert: true,
-            })
+        // Simulate progress since fetch doesn't support real progress tracking
+        let progress = 0
+        const progressInterval = setInterval(() => {
+            progress = Math.min(progress + 10, 90)
+            onProgress?.(progress)
+        }, 200)
 
-        if (uploadError) throw uploadError
+        const result = await uploadFile(file)
 
-        const { data: { publicUrl } } = supabase.storage
-            .from('listings')
-            .getPublicUrl(fileName)
+        clearInterval(progressInterval)
+        onProgress?.(100)
 
-        return { url: publicUrl, error: null }
-    } catch (error) {
-        return { url: null, error: error as Error }
+        return result
+    } catch (error: any) {
+        return { url: '', error: { message: error.message || 'Upload failed' } }
     }
 }
 
-// Delete listing images
-export async function deleteListingImages(userId: string, listingId: string): Promise<void> {
-    const supabase = createClient()
-
-    const { data: files } = await supabase.storage
-        .from('listings')
-        .list(`${userId}/${listingId}`)
-
-    if (files && files.length > 0) {
-        const filesToDelete = files.map(f => `${userId}/${listingId}/${f.name}`)
-        await supabase.storage
-            .from('listings')
-            .remove(filesToDelete)
-    }
-}
-
-// Hook for file upload with progress
-export function useFileUpload() {
-    const [uploading, setUploading] = useState(false)
-    const [progress, setProgress] = useState(0)
-    const [error, setError] = useState<Error | null>(null)
-
-    const uploadFile = async (
-        file: File,
-        bucket: 'avatars' | 'listings',
-        path: string
-    ): Promise<string | null> => {
-        setUploading(true)
-        setProgress(0)
-        setError(null)
-
-        try {
-            const supabase = createClient()
-
-            // Simulate progress (Supabase doesn't provide real progress)
-            const progressInterval = setInterval(() => {
-                setProgress(prev => Math.min(prev + 10, 90))
-            }, 100)
-
-            const { error: uploadError } = await supabase.storage
-                .from(bucket)
-                .upload(path, file, {
-                    cacheControl: '3600',
-                    upsert: true,
-                })
-
-            clearInterval(progressInterval)
-
-            if (uploadError) throw uploadError
-
-            setProgress(100)
-
-            const { data: { publicUrl } } = supabase.storage
-                .from(bucket)
-                .getPublicUrl(path)
-
-            return publicUrl
-        } catch (err) {
-            setError(err as Error)
-            return null
-        } finally {
-            setUploading(false)
-        }
-    }
-
-    return { uploadFile, uploading, progress, error }
+/**
+ * Upload an avatar image for a user
+ */
+export async function uploadAvatar(
+    file: File,
+    userId: string
+): Promise<{ url: string; error?: any }> {
+    return uploadFile(file)
 }

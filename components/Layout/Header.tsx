@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { DEMO_MODE } from '@/lib/mock-data'
+import { signOut } from 'next-auth/react'
 
 interface HeaderProps {
     user: any
@@ -13,13 +12,7 @@ export function Header({ user }: HeaderProps) {
     const router = useRouter()
 
     const handleSignOut = async () => {
-        if (DEMO_MODE) {
-            router.push('/login')
-            return
-        }
-
-        const supabase = createClient()
-        await supabase.auth.signOut()
+        await signOut({ redirect: false })
         router.push('/login')
         router.refresh()
     }
@@ -30,7 +23,6 @@ export function Header({ user }: HeaderProps) {
                 <Link href="/" className="flex items-center space-x-2">
                     <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-pink-500 rounded-lg" />
                     <span className="text-xl font-bold text-gray-900">Dezapegão</span>
-                    {DEMO_MODE && <span className="text-xs bg-yellow-400 px-2 py-1 rounded">DEMO</span>}
                 </Link>
 
                 <div className="flex items-center space-x-4">

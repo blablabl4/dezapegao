@@ -4,10 +4,7 @@ import Link from 'next/link'
 import { formatPrice, timeAgo } from '@/lib/utils'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { getUserListings } from '@/lib/listings'
-import { DEMO_MODE } from '@/lib/mock-data'
-import { getStoredListings, deleteStoredListing, getCurrentStoredUser, type StoredListing } from '@/lib/local-storage'
-import type { Listing } from '@/types/database'
+import { getUserListings, deleteListing } from '@/lib/listings-client'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -16,7 +13,6 @@ const glassStyle = {
     border: '1px solid rgba(255, 255, 255, 0.1)',
 }
 
-// Tipo unificado para exibição (funciona com localStorage e Supabase)
 interface DisplayListing {
     id: string
     title: string
@@ -37,28 +33,9 @@ export default function DashboardPage() {
         async function fetchListings() {
             setLoading(true)
 
-            if (DEMO_MODE) {
-                // Demo mode: usar localStorage
-                const currentUser = getCurrentStoredUser()
-                const allListings = getStoredListings()
-                const myListings = currentUser
-                    ? allListings.filter(l => l.user_id === currentUser.id)
-                    : allListings
-
-                setListings(myListings.map(l => ({
-                    id: l.id,
-                    title: l.title,
-                    price: l.price,
-                    image_url: l.image_urls?.[0] || '',
-                    likes_count: l.likes_count,
-                    whatsapp_clicks: l.whatsapp_clicks,
-                    status: l.status,
-                    created_at: l.created_at,
-                })))
-            } else if (user) {
-                // Produção: buscar do Supabase
-                const listings = await getUserListings(user.id)
-                setListings(listings.map((l: any) => ({
+            if (user) {
+                const listingsData = await getUserListings(user.id)
+                setListings(listingsData.map((l: any) => ({
                     id: l.id,
                     title: l.title,
                     price: l.price,
@@ -79,26 +56,18 @@ export default function DashboardPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('Excluir este anúncio?')) return
 
-        if (DEMO_MODE) {
-            deleteStoredListing(id)
-        } else {
-            // Em produção, importar e usar deleteListing do lib/listings
-            const { deleteListing } = await import('@/lib/listings')
-            if (user) {
-                const { error } = await deleteListing(id, user.id)
-                if (error) {
-                    alert('Erro ao excluir: ' + error.message)
-                    return
-                }
+        if (user) {
+            const { error } = await deleteListing(id, user.id)
+            if (error) {
+                alert('Erro ao excluir: ' + error.message)
+                return
             }
         }
 
         setListings(listings.filter(l => l.id !== id))
     }
 
-    const displayName = DEMO_MODE
-        ? getCurrentStoredUser()?.username
-        : profile?.username
+    const displayName = profile?.username
 
     const activeListings = listings.filter(l => l.status === 'active')
     const planLimits: Record<string, number> = { free: 3, basic: 5, pro: 10, premium: 999 }

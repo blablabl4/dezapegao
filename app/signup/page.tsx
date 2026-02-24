@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/hooks/useAuth'
 import { signUpSchema, type SignUpInput } from '@/lib/validation'
-import { DEMO_MODE } from '@/lib/mock-data'
-import { setCurrentStoredUser } from '@/lib/local-storage'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -45,22 +43,6 @@ export default function SignUpPage() {
         setLoading(true)
 
         try {
-            if (DEMO_MODE) {
-                // Save to localStorage in demo mode
-                setCurrentStoredUser({
-                    id: Date.now().toString(),
-                    username: formData.username || 'usuario_demo',
-                    email: formData.email || 'demo@dezapegao.com',
-                    phone: formData.phone || '+5511999999999',
-                    gender: formData.gender as any || undefined,
-                    birthdate: formData.birthdate || undefined,
-                    plan: 'free',
-                })
-                router.push('/')
-                router.refresh()
-                return
-            }
-
             const data: SignUpInput = {
                 email: formData.email,
                 password: formData.password,
@@ -69,7 +51,6 @@ export default function SignUpPage() {
             }
             signUpSchema.parse(data)
 
-            // Usa useAuth.signUp que cria TANTO o auth user QUANTO o profile no DB
             const { error: signUpError } = await signUp(
                 formData.email,
                 formData.password,
@@ -110,15 +91,10 @@ export default function SignUpPage() {
                         <div className="mt-3 bg-green-500/20 border border-green-500/30 text-green-200 px-3 py-1.5 rounded-full text-xs font-medium inline-block">
                             🎉 3 anúncios/semana grátis!
                         </div>
-                        {DEMO_MODE && (
-                            <p className="text-xs text-yellow-300 mt-2 font-medium">
-                                🔧 DEMO - Preencha para testar
-                            </p>
-                        )}
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        {error && !DEMO_MODE && (
+                        {error && (
                             <div className="bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl text-sm">
                                 {error}
                             </div>
@@ -134,7 +110,7 @@ export default function SignUpPage() {
                                 type="text"
                                 value={formData.username}
                                 onChange={handleChange}
-                                required={!DEMO_MODE}
+                                required
                                 className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent transition text-sm"
                                 placeholder="seu_usuario"
                             />
@@ -150,7 +126,7 @@ export default function SignUpPage() {
                                 type="email"
                                 value={formData.email}
                                 onChange={handleChange}
-                                required={!DEMO_MODE}
+                                required
                                 className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent transition text-sm"
                                 placeholder="seu@email.com"
                             />
@@ -166,7 +142,7 @@ export default function SignUpPage() {
                                 type="tel"
                                 value={formData.phone}
                                 onChange={handleChange}
-                                required={!DEMO_MODE}
+                                required
                                 className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent transition text-sm"
                                 placeholder="+5511999999999"
                             />
@@ -219,7 +195,7 @@ export default function SignUpPage() {
                                 type="password"
                                 value={formData.password}
                                 onChange={handleChange}
-                                required={!DEMO_MODE}
+                                required
                                 className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent transition text-sm"
                                 placeholder="••••••••"
                             />

@@ -82,10 +82,8 @@ export function AuthModal({ isOpen, onClose, onSuccess, message }: AuthModalProp
                 return
             }
 
-            // Generate synthetic email for Supabase Auth
+            // Generate synthetic email from phone number
             // Format: 55 + DDD + Number @dezapegao.com
-            // If user typed 55 prefix locally, handle it, but usually Brazilians type 11...
-            // Let's assume input is DDD + Number (10 or 11 digits)
             const emailAuth = `55${cleanPhone}@dezapegao.com`
 
             if (mode === 'signup') {

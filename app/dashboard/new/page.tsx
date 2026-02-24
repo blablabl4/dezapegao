@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useAuth } from '@/hooks/useAuth'
 import type { CategoryType } from '@/types/database'
-import { saveStoredListing, getCurrentStoredUser, setCurrentStoredUser } from '@/lib/local-storage'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -26,7 +26,7 @@ const categories: { value: CategoryType; label: string; icon: string }[] = [
 
 export default function NewListingPage() {
     const router = useRouter()
-    const [user, setUser] = useState<any>(null)
+    const { user } = useAuth()
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -37,21 +37,6 @@ export default function NewListingPage() {
     const [imagePreviews, setImagePreviews] = useState<string[]>([])
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
-
-    useEffect(() => {
-        // Check if user exists, if not create one
-        let currentUser = getCurrentStoredUser()
-        if (!currentUser) {
-            currentUser = {
-                id: Date.now().toString(),
-                username: 'usuario_' + Math.random().toString(36).substring(7),
-                email: 'usuario@dezapegao.com',
-                phone: '+5511999999999'
-            }
-            setCurrentStoredUser(currentUser)
-        }
-        setUser(currentUser)
-    }, [])
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || [])
@@ -87,6 +72,11 @@ export default function NewListingPage() {
         e.preventDefault()
         setError('')
 
+        if (!user) {
+            setError('Você precisa estar logado para criar um anúncio.')
+            return
+        }
+
         if (images.length === 0) {
             setError('Adicione pelo menos 1 foto')
             return
@@ -109,20 +99,45 @@ export default function NewListingPage() {
 
         setLoading(true)
 
-        // Save to localStorage
-        saveStoredListing({
-            user_id: user.id,
-            title: formData.title,
-            description: formData.description,
-            price: parseFloat(formData.price),
-            category: formData.category,
-            image_urls: imagePreviews, // Save base64 URLs for now
-        })
+        try {
+            // Upload images to R2
+            const imageUrls: string[] = []
+            for (const file of images) {
+                const uploadForm = new FormData()
+                uploadForm.append('file', file)
+                const uploadRes = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: uploadForm,
+                })
+                if (!uploadRes.ok) throw new Error('Erro ao fazer upload da imagem')
+                const { url } = await uploadRes.json()
+                imageUrls.push(url)
+            }
 
-        // Redirect to dashboard
-        setTimeout(() => {
+            // Create listing via API
+            const res = await fetch('/api/listings/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: formData.title,
+                    description: formData.description,
+                    price: parseFloat(formData.price),
+                    category: formData.category,
+                    imageUrls,
+                }),
+            })
+
+            if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error || 'Erro ao criar anúncio')
+            }
+
             router.push('/dashboard')
-        }, 300)
+        } catch (err: any) {
+            setError(err.message || 'Erro ao criar anúncio')
+        } finally {
+            setLoading(false)
+        }
     }
 
     return (

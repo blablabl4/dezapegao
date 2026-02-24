@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { getCurrentStoredUser } from '@/lib/local-storage'
+import { useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -23,15 +23,9 @@ const mockPayments = [
 ]
 
 export function PaymentsModal({ isOpen, onClose }: PaymentsModalProps) {
-    const [user, setUser] = useState<any>(null)
+    const { profile } = useAuth()
     const [payments] = useState(mockPayments)
     const [addingCard, setAddingCard] = useState(false)
-
-    useEffect(() => {
-        if (isOpen) {
-            setUser(getCurrentStoredUser())
-        }
-    }, [isOpen])
 
     if (!isOpen) return null
 
@@ -63,7 +57,7 @@ export function PaymentsModal({ isOpen, onClose }: PaymentsModalProps) {
                             <span className="mr-2">💳</span> Método de Pagamento
                         </h2>
 
-                        {user?.plan === 'free' ? (
+                        {profile?.plan === 'free' || !profile?.plan ? (
                             <div className="rounded-xl p-5 text-center" style={glassStyle}>
                                 <p className="text-white/70 mb-4">Você está no plano Free</p>
                                 <p className="text-white/50 text-sm">Adicione um cartão para fazer upgrade</p>

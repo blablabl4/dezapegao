@@ -3,7 +3,7 @@
 import { formatPrice } from '@/lib/utils'
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { getUserListings, deleteListing, type Listing } from '@/lib/listings'
+import { getUserListings, deleteListing, type Listing } from '@/lib/listings-client'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -62,14 +62,11 @@ export function DashboardModal({ isOpen, onClose, onEdit, onRefresh }: Dashboard
         if (listing) {
             const newStatus = listing.status === 'active' ? 'expired' : 'active'
             try {
-                // Use Supabase directly for status update
-                const { createClient } = await import('@/lib/supabase/client')
-                const supabase = createClient()
-                await supabase
-                    .from('listings')
-                    .update({ status: newStatus })
-                    .eq('id', id)
-                    .eq('user_id', user.id)
+                await fetch(`/api/listings/${id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                })
                 loadListings()
                 onRefresh?.()
             } catch (error) {

@@ -13,7 +13,7 @@ import { AuthModal } from '@/components/User/AuthModal'
 import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { getActiveListings, type Listing } from '@/lib/listings'
+import { getActiveListings, type Listing } from '@/lib/listings-client'
 
 const glassStyle = {
   background: 'rgba(0, 0, 0, 0.4)',
@@ -43,11 +43,11 @@ export default function HomePage() {
   const [authOpen, setAuthOpen] = useState(false)
   const [authMessage, setAuthMessage] = useState('')
 
-  // Load listings from Supabase
+  // Load listings from API
   const loadListings = useCallback(async () => {
     try {
-      const supabaseListings = await getActiveListings()
-      const feedListings = supabaseListings.map((listing: Listing) => ({
+      const allListings = await getActiveListings()
+      const feedListings = allListings.map((listing: Listing) => ({
         ...listing,
         image_url: listing.images?.[0]?.image_url || '',
         profiles: listing.profile || {

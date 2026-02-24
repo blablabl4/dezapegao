@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ALL_CATEGORIES, DEFAULT_CATEGORIES } from '@/lib/categories'
 import { useAuth } from '@/hooks/useAuth'
-import { createClient } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
 const glassStyle = {
@@ -50,25 +49,22 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const [activeCount, setActiveCount] = useState(0)
-    const supabaseClient = createClient()
 
     useEffect(() => {
-        if (isOpen && user) {
+        if (isOpen && user && profile) {
             resetForm()
             fetchActiveCount()
         }
-    }, [isOpen, user])
+    }, [isOpen, user, profile])
 
     const fetchActiveCount = async () => {
-        if (!user) return
-        const { count, error } = await supabaseClient
-            .from('listings')
-            .select('*', { count: 'exact', head: true })
-            .eq('user_id', user.id)
-            .eq('status', 'active')
-
-        if (!error && count !== null) {
-            setActiveCount(count)
+        if (!profile) return
+        try {
+            const response = await fetch(`/api/user/listings-count?userId=${profile.id}`)
+            const { count } = await response.json()
+            setActiveCount(count || 0)
+        } catch (err) {
+            console.error('Error fetching count:', err)
         }
     }
 
@@ -183,12 +179,7 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
         setError('')
 
         // Validations
-        const maxListings = profile?.plan === 'pro' ? 10 : profile?.plan === 'premium' ? 20 : 3
-
-        if (activeCount >= maxListings) {
-            setError(`Limite de anúncios ativos atingido! (${activeCount}/${maxListings})`)
-            return
-        }
+        if (!profile) return
 
         if (images.length === 0) {
             setError('Adicione pelo menos 1 foto')
@@ -224,13 +215,32 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
         setLoading(true)
 
         try {
-            if (!user) throw new Error('User not authenticated')
+            if (!user) throw new Error('Usuário não autenticado')
 
-            // 1. Create Listing Record
-            const { data: listingData, error: listingError } = await supabaseClient
-                .from('listings')
-                .insert({
-                    user_id: user.id,
+            // 1. Upload Images to R2 via our API
+            const imageUrls: string[] = []
+            for (const file of images) {
+                const uploadFormData = new FormData()
+                uploadFormData.append('file', file)
+
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: uploadFormData
+                })
+
+                if (!response.ok) throw new Error('Falha no upload da imagem')
+                const { url } = await response.json()
+                imageUrls.push(url)
+            }
+
+            // 2. Create Listing via API or imported helper if used in server components
+            // For client-side, we can use a fetch to a new listings API or the helper if exported
+            // Given listings.ts uses prisma directly, it's better to keep it server-side.
+            // I'll create an API route for creating listings.
+            const createListingResponse = await fetch('/api/listings/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     title: formData.title,
                     description: formData.description,
                     price: parseFloat(formData.price),
@@ -239,44 +249,14 @@ export function NewListingModal({ isOpen, onClose }: NewListingModalProps) {
                     city: location.city,
                     state: location.state,
                     neighborhood: location.neighborhood,
-                    status: 'active'
+                    image_urls: imageUrls
                 })
-                .select()
-                .single()
-
-            if (listingError) throw listingError
-
-            // 2. Upload Images
-            const uploadPromises = images.map(async (file, index) => {
-                const fileExt = file.name.split('.').pop()
-                const fileName = `${user.id}/${listingData.id}/${index}_${Date.now()}.${fileExt}`
-
-                const { error: uploadError } = await supabaseClient.storage
-                    .from('listings')
-                    .upload(fileName, file)
-
-                if (uploadError) throw uploadError
-
-                // Get Public URL
-                const { data: { publicUrl } } = supabaseClient.storage
-                    .from('listings')
-                    .getPublicUrl(fileName)
-
-                return {
-                    listing_id: listingData.id,
-                    image_url: publicUrl,
-                    position: index
-                }
             })
 
-            const uploadedImages = await Promise.all(uploadPromises)
-
-            // 3. Save Images to DB
-            const { error: imagesError } = await supabaseClient
-                .from('listing_images')
-                .insert(uploadedImages)
-
-            if (imagesError) throw imagesError
+            if (!createListingResponse.ok) {
+                const errorData = await createListingResponse.json()
+                throw new Error(errorData.error || 'Erro ao criar anúncio')
+            }
 
             // Success
             setTimeout(() => {

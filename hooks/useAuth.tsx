@@ -1,9 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react'
 import { logger } from '@/lib/logger'
-import type { User, Session } from '@supabase/supabase-js'
 
 interface Profile {
     id: string
@@ -11,19 +10,16 @@ interface Profile {
     email: string
     phone: string
     avatar_url: string | null
-    gender: 'male' | 'female' | 'other' | 'prefer_not_say' | null
+    gender: string | null
     birthdate: string | null
-    city: string | null
-    state: string | null
     plan: 'free' | 'basic' | 'pro' | 'premium'
     status: 'active' | 'suspended' | 'banned'
-    created_at: string
 }
 
 interface AuthContextType {
-    user: User | null
+    user: any | null
     profile: Profile | null
-    session: Session | null
+    session: any | null
     loading: boolean
     signUp: (email: string, password: string, metadata: SignUpMetadata) => Promise<{ error: Error | null }>
     signIn: (email: string, password: string) => Promise<{ error: Error | null }>
@@ -43,191 +39,47 @@ interface SignUpMetadata {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const [user, setUser] = useState<User | null>(null)
+    const { data: session, status } = useSession()
     const [profile, setProfile] = useState<Profile | null>(null)
-    const [session, setSession] = useState<Session | null>(null)
-    const [loading, setLoading] = useState(true)
+    const loading = status === 'loading'
 
-    const supabase = createClient()
-
-    // Fetch profile data
-    const fetchProfile = async (userId: string) => {
-        try {
-            // Add a timeout to the fetch operation
-            const fetchPromise = supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single()
-
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
-            )
-
-            const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any
-
-            if (error) {
-                // If checking specifically for existence, we want to know if it's a 404 or other error
-                if (error.code === 'PGRST116') { // Error code for "result contains 0 rows"
-                    logger.warn('auth', 'fetchProfile', 'Profile not found', { userId })
-                    return { data: null, error: 'not_found' }
-                }
-                logger.error('auth', 'fetchProfile', 'Error fetching profile', error, { userId })
-                return { data: null, error: error.message }
-            }
-            logger.debug('auth', 'fetchProfile', 'Profile fetched successfully', { userId })
-            return { data: data as Profile, error: null }
-        } catch (err) {
-            logger.error('auth', 'fetchProfile', 'Unexpected error fetching profile', err)
-            return { data: null, error: 'timeout_or_error' }
-        }
-    }
-
-    // Initialize auth state
     useEffect(() => {
-        let mounted = true
-
-        const initAuth = async () => {
-            logger.info('auth', 'initAuth', 'Starting auth initialization')
-
-            // OPTIMIZATION: Check for logout flag to skip wait
-            if (typeof window !== 'undefined' && window.location.search.includes('logout=')) {
-                logger.info('auth', 'initAuth', 'Logout flag detected - skipping session restoring')
-                if (mounted) setLoading(false)
-                return
-            }
-
-            // Safety timeout: If Supabase is slow, don't block the app forever
-            const safetyTimeout = setTimeout(() => {
-                if (mounted) {
-                    logger.warn('auth', 'initAuth', 'Auth timeout - releasing loading state')
-                    setLoading(false)
-                }
-            }, 7000)
-
-            try {
-                // Get initial session
-                const { data: { session: currentSession }, error } = await supabase.auth.getSession()
-
-                if (error) throw error
-
-                if (mounted) {
-                    if (currentSession?.user) {
-                        logger.info('auth', 'initAuth', 'Session found', { userId: currentSession.user.id })
-
-                        // Load profile - MUST await this to prevent ghost sessions
-                        const { data: profileData, error: profileError } = await fetchProfile(currentSession.user.id)
-
-                        // Only force logout if profile is EXPLICITLY confirmed missing (deleted user)
-                        // If it's a network error or other issue, keep the session to prevent logout loops
-                        if (!profileData && profileError === 'not_found') {
-                            logger.warn('auth', 'initAuth', 'User exists but profile missing - forcing logout', { userId: currentSession.user.id })
-                            await supabase.auth.signOut()
-                            if (mounted) {
-                                setSession(null)
-                                setUser(null)
-                                setProfile(null)
-                            }
-                        } else {
-                            if (mounted) {
-                                setSession(currentSession)
-                                setUser(currentSession.user)
-                                setProfile(profileData) // Might be null if error, but user stays logged in
-                            }
-                        }
-                    } else {
-                        logger.info('auth', 'initAuth', 'No active session')
-                    }
-                }
-            } catch (error) {
-                logger.error('auth', 'initAuth', 'Auth initialization failed', error)
-                if (mounted) {
-                    setSession(null)
-                    setUser(null)
-                    setProfile(null)
-                }
-            } finally {
-                clearTimeout(safetyTimeout)
-                if (mounted) {
-                    setLoading(false)
-                }
-            }
+        if (session?.user) {
+            setProfile({
+                id: (session.user as any).id,
+                username: (session.user as any).username,
+                email: session.user.email || '',
+                phone: (session.user as any).phone,
+                avatar_url: (session.user as any).avatarUrl,
+                gender: (session.user as any).gender || null,
+                birthdate: (session.user as any).birthdate || null,
+                plan: (session.user as any).plan || 'free',
+                status: 'active' // Default for now
+            })
+        } else {
+            setProfile(null)
         }
-
-        initAuth()
-
-        // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, newSession) => {
-                if (newSession?.user) {
-                    const { data: profileData, error: profileError } = await fetchProfile(newSession.user.id)
-
-                    if (!profileData && profileError === 'not_found') {
-                        logger.warn('auth', 'onStateChange', 'User exists but profile missing - forcing logout', { userId: newSession.user.id })
-                        await supabase.auth.signOut()
-                        setSession(null)
-                        setUser(null)
-                        setProfile(null)
-                    } else {
-                        setSession(newSession)
-                        setUser(newSession.user)
-                        setProfile(profileData)
-                    }
-                } else {
-                    setSession(null)
-                    setUser(null)
-                    setProfile(null)
-                }
-
-                setLoading(false)
-            }
-        )
-
-        return () => {
-            subscription.unsubscribe()
-        }
-    }, [])
+    }, [session])
 
     // Sign up
     const signUp = async (email: string, password: string, metadata: SignUpMetadata) => {
         try {
-            const { data, error: signUpError } = await supabase.auth.signUp({
-                email,
-                password,
-                options: {
-                    data: metadata,
-                    emailRedirectTo: `${window.location.origin}/vendas/auth/callback`,
-                },
+            const response = await fetch('/api/auth/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, metadata })
             })
 
-            if (signUpError) throw signUpError
+            const result = await response.json()
 
-            // Create profile after signup
-            if (data.user) {
-                const { error: profileError } = await supabase
-                    .from('profiles')
-                    .insert({
-                        id: data.user.id,
-                        username: metadata.username,
-                        email: email,
-                        phone: metadata.phone,
-                        gender: metadata.gender || null,
-                        city: metadata.city || null,
-                        state: metadata.state || null,
-                        plan: 'free',
-                        status: 'active',
-                    })
-
-                if (profileError) {
-                    logger.error('auth', 'signup', 'Profile creation failed after signup', profileError, { userId: data.user.id })
-                    // Don't throw - user is created, profile can be fixed later
-                } else {
-                    logger.info('auth', 'signup', 'Profile created successfully', { userId: data.user.id })
-                }
+            if (!response.ok) {
+                throw new Error(result.error || 'Erro ao realizar cadastro')
             }
 
-            return { error: null }
+            // After signup, automatically sign in
+            return await signIn(email, password)
         } catch (error) {
+            logger.error('auth', 'signup', 'Signup failed', error)
             return { error: error as Error }
         }
     }
@@ -235,77 +87,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Sign in
     const signIn = async (email: string, password: string) => {
         try {
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
+            // Need to handle the phone-based email generation if necessary, 
+            // but the caller (AuthModal) already does that.
+            const result = await nextAuthSignIn('credentials', {
+                redirect: false,
+                phone: email.split('@')[0].replace(/^55/, ''), // Extract phone from synthetic email if needed
+                password
             })
 
-            if (error) throw error
+            if (result?.error) {
+                throw new Error(result.error === 'CredentialsSignin' ? 'Telefone ou senha incorretos' : result.error)
+            }
+
             return { error: null }
         } catch (error) {
+            logger.error('auth', 'signIn', 'Login failed', error)
             return { error: error as Error }
         }
     }
 
     // Sign out
     const signOut = async () => {
-        logger.info('auth', 'signOut', 'Starting signOut')
-        try {
-            // Use scope: 'global' to sign out from all devices
-            const { error } = await supabase.auth.signOut({ scope: 'global' })
-            if (error) {
-                logger.error('auth', 'signOut', 'Supabase signOut error', error)
-            } else {
-                logger.info('auth', 'signOut', 'Supabase signOut successful')
-            }
-        } catch (error) {
-            logger.error('auth', 'signOut', 'Critical signOut error', error)
-        }
-
-        // Clear all Supabase-related localStorage items
-        if (typeof window !== 'undefined') {
-            const keysToRemove = Object.keys(localStorage).filter(key =>
-                key.startsWith('sb-') || key.includes('supabase')
-            )
-            keysToRemove.forEach(key => {
-                localStorage.removeItem(key)
-                logger.debug('auth', 'signOut', `Removed localStorage key: ${key}`)
-            })
-        }
-
-        setUser(null)
-        setProfile(null)
-        setSession(null)
-        logger.info('auth', 'signOut', 'State and storage cleared')
-
-        // Force cookie cleanup (aggressive)
-        if (typeof document !== 'undefined') {
-            document.cookie.split(";").forEach((c) => {
-                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-            });
-        }
-
-        // Force reload to ensure clean state (avoids caching issues)
-        if (typeof window !== 'undefined') {
-            window.location.href = '/?logout=' + Date.now()
-        }
+        await nextAuthSignOut({ callbackUrl: '/vendas' })
     }
 
     // Update profile
     const updateProfile = async (data: Partial<Profile>) => {
-        if (!user) return { error: new Error('Not authenticated') }
-
+        // This will need a new API route /api/profile/update
         try {
-            const { error } = await supabase
-                .from('profiles')
-                .update(data)
-                .eq('id', user.id)
+            const response = await fetch('/api/profile/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
 
-            if (error) throw error
-
-            // Refresh profile data
-            const { data: updatedProfile } = await fetchProfile(user.id)
-            setProfile(updatedProfile)
+            if (!response.ok) throw new Error('Erro ao atualizar perfil')
 
             return { error: null }
         } catch (error) {
@@ -315,16 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Refresh profile
     const refreshProfile = async () => {
-        if (user) {
-            const { data: profileData } = await fetchProfile(user.id)
-            setProfile(profileData)
-        }
+        // NextAuth handle this via session polling or manual update
+        // For simplicity, we can just reload the page or use session update
     }
 
     return (
         <AuthContext.Provider
             value={{
-                user,
+                user: session?.user || null,
                 profile,
                 session,
                 loading,
@@ -362,26 +176,26 @@ export function useCanCreateListing() {
                 return
             }
 
-            const supabase = createClient()
-            const { count } = await supabase
-                .from('listings')
-                .select('*', { count: 'exact', head: true })
-                .eq('user_id', profile.id)
-                .eq('status', 'active')
+            try {
+                const response = await fetch(`/api/user/listings-count?userId=${profile.id}`)
+                const { count } = await response.json()
 
-            const planLimits = {
-                free: 3,
-                basic: 5,
-                pro: 10,
-                premium: 999,
+                const planLimits = {
+                    free: 3,
+                    basic: 5,
+                    pro: 10,
+                    premium: 999,
+                }
+
+                const userLimit = planLimits[profile.plan] || 3
+                const currentCount = count || 0
+
+                setActiveCount(currentCount)
+                setLimit(userLimit)
+                setCanCreate(currentCount < userLimit)
+            } catch (error) {
+                console.error('Error checking limit:', error)
             }
-
-            const userLimit = planLimits[profile.plan] || 3
-            const activeCount = count || 0
-
-            setActiveCount(activeCount)
-            setLimit(userLimit)
-            setCanCreate(activeCount < userLimit)
         }
 
         checkLimit()

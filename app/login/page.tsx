@@ -2,10 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { signIn } from 'next-auth/react'
 import Link from 'next/link'
-import { signInSchema, type SignInInput } from '@/lib/validation'
-import { DEMO_MODE } from '@/lib/mock-data'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -26,31 +24,21 @@ export default function LoginPage() {
         setLoading(true)
 
         try {
-            if (DEMO_MODE) {
-                router.push('/')
-                router.refresh()
-                return
-            }
+            const result = await signIn('credentials', {
+                email,
+                password,
+                redirect: false,
+            })
 
-            const data: SignInInput = { email, password }
-            signInSchema.parse(data)
-
-            const supabase = createClient()
-            const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-
-            if (signInError) {
-                setError(signInError.message)
+            if (result?.error) {
+                setError('Email ou senha incorretos')
                 return
             }
 
             router.push('/')
             router.refresh()
         } catch (err: any) {
-            if (err.errors) {
-                setError(err.errors[0].message)
-            } else {
-                setError('Erro ao fazer login. Tente novamente.')
-            }
+            setError('Erro ao fazer login. Tente novamente.')
         } finally {
             setLoading(false)
         }
@@ -58,24 +46,17 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center p-4 relative">
-            {/* Background */}
             <div className="absolute inset-0 bg-gradient-to-br from-purple-600 via-pink-500 to-orange-400" />
 
             <div className="w-full max-w-sm relative z-10">
-                {/* Glass Card */}
                 <div className="rounded-3xl p-6 sm:p-8 border border-white/10" style={glassStyle}>
                     <div className="text-center mb-8">
                         <h1 className="text-2xl sm:text-3xl font-heading font-bold text-white mb-2">Dezapegão</h1>
                         <p className="text-white/70 text-sm sm:text-base">Entre na sua conta</p>
-                        {DEMO_MODE && (
-                            <p className="text-xs text-yellow-300 mt-2 font-medium">
-                                🔧 DEMO - Clique em Entrar
-                            </p>
-                        )}
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
-                        {error && !DEMO_MODE && (
+                        {error && (
                             <div className="bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl text-sm">
                                 {error}
                             </div>
@@ -90,9 +71,9 @@ export default function LoginPage() {
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                required={!DEMO_MODE}
+                                required
                                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent transition text-sm sm:text-base"
-                                placeholder={DEMO_MODE ? "demo@exemplo.com" : "seu@email.com"}
+                                placeholder="seu@email.com"
                             />
                         </div>
 
@@ -105,7 +86,7 @@ export default function LoginPage() {
                                 type="password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                required={!DEMO_MODE}
+                                required
                                 className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-xl text-white placeholder-white/40 focus:ring-2 focus:ring-white/30 focus:border-transparent transition text-sm sm:text-base"
                                 placeholder="••••••••"
                             />
@@ -130,7 +111,6 @@ export default function LoginPage() {
                     </div>
                 </div>
 
-                {/* Back to feed */}
                 <Link href="/" className="block text-center mt-6 text-white/60 hover:text-white text-sm transition">
                     ← Voltar ao feed
                 </Link>

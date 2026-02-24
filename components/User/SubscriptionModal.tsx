@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getCurrentStoredUser, updateCurrentStoredUser } from '@/lib/local-storage'
+import { useAuth } from '@/hooks/useAuth'
 
 const glassStyle = {
     background: 'rgba(0, 0, 0, 0.4)',
@@ -51,17 +51,15 @@ const plans = [
 ]
 
 export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
+    const { profile } = useAuth()
     const [currentPlan, setCurrentPlan] = useState('free')
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
 
     useEffect(() => {
-        if (isOpen) {
-            const user = getCurrentStoredUser()
-            if (user?.plan) {
-                setCurrentPlan(user.plan)
-            }
+        if (isOpen && profile?.plan) {
+            setCurrentPlan(profile.plan)
         }
-    }, [isOpen])
+    }, [isOpen, profile])
 
     const handleUpgrade = (planId: string) => {
         setSelectedPlan(planId)
@@ -101,8 +99,8 @@ export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
                             <div
                                 key={plan.id}
                                 className={`relative rounded-2xl p-5 border transition ${currentPlan === plan.id
-                                        ? 'border-green-400 shadow-lg shadow-green-500/20'
-                                        : 'border-white/20 hover:border-white/40'
+                                    ? 'border-green-400 shadow-lg shadow-green-500/20'
+                                    : 'border-white/20 hover:border-white/40'
                                     }`}
                                 style={glassStyle}
                             >
@@ -155,8 +153,8 @@ export function SubscriptionModal({ isOpen, onClose }: SubscriptionModalProps) {
                                     <button
                                         onClick={() => handleUpgrade(plan.id)}
                                         className={`w-full py-3 rounded-xl font-semibold transition ${plan.popular
-                                                ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                                                : 'bg-white/20 hover:bg-white/30 text-white'
+                                            ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                                            : 'bg-white/20 hover:bg-white/30 text-white'
                                             }`}
                                     >
                                         Assinar

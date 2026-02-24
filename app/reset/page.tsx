@@ -1,35 +1,27 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 
 export default function ResetPage() {
     const [status, setStatus] = useState('Iniciando limpeza...')
-    const router = useRouter()
-    const supabase = createClient()
 
     useEffect(() => {
         const clearEverything = async () => {
             try {
-                // 1. Clean Local Data IMMEDIATELY (Prioritize this)
+                // 1. Clean Local Data
                 setStatus('Limpando dados locais...')
                 localStorage.clear()
                 sessionStorage.clear()
 
-                // Clear cookies properly
+                // Clear cookies
                 document.cookie.split(";").forEach((c) => {
                     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
                 });
 
-                // 2. Try Supabase SignOut (with timeout)
-                // We don't want to block if Supabase is down/slow
-                setStatus('Tentando deslogar remotamente...')
-
-                const signOutPromise = supabase.auth.signOut({ scope: 'global' })
-                const timeoutPromise = new Promise(resolve => setTimeout(resolve, 3000))
-
-                await Promise.race([signOutPromise, timeoutPromise])
+                // 2. Sign out from NextAuth
+                setStatus('Deslogando...')
+                await signOut({ redirect: false })
 
                 // 3. Finalize
                 setStatus('✅ Limpeza completa! Redirecionando...')
@@ -38,7 +30,6 @@ export default function ResetPage() {
                 console.error(error)
                 setStatus('⚠️ Aviso: ' + String(error))
             } finally {
-                // Force redirect guarantees we leave this page
                 setTimeout(() => {
                     window.location.href = '/'
                 }, 1000)
@@ -55,7 +46,7 @@ export default function ResetPage() {
                 <p className="text-xl animate-pulse">{status}</p>
                 <div className="text-sm text-gray-400 max-w-md mx-auto">
                     <p>1. Limpa localStorage e Cookies</p>
-                    <p>2. Tenta deslogar do Supabase (max 3s)</p>
+                    <p>2. Desloga do NextAuth</p>
                     <p>3. Redireciona para Home</p>
                 </div>
             </div>
